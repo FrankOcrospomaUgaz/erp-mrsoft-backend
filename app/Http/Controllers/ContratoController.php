@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Contrato;
-use App\Models\Cliente;
+use App\Models\{Contrato, Cliente, ContratoProductoModulo};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB;
 
 class ContratoController extends Controller
 {
@@ -56,13 +56,40 @@ class ContratoController extends Controller
             ], 422);
         }
 
-        $contrato = Contrato::create($request->all());
+        DB::beginTransaction();
 
-        return response()->json([
-            'status' => 201,
-            'message' => 'Contrato creado exitosamente',
-            'data' => $contrato
-        ], 201);
+        try {
+            $contrato = Contrato::create($request->all());
+
+            // Registrar productos y módulos contratados
+            if ($request->filled('productos_modulos')) {
+                foreach ($request->productos_modulos as $pm) {
+                    ContratoProductoModulo::create([
+                        'contrato_id' => $contrato->id,
+                        'producto_id' => $pm['producto_id'],
+                        'modulo_id' => $pm['modulo_id'],
+                        'precio' => $pm['precio']
+                    ]);
+                }
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 201,
+                'message' => 'Contrato creado exitosamente',
+                'data' => $contrato->load(['cliente', 'cuotas', 'contratoProductoModulos'])
+            ], 201);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'status' => 500,
+                'message' => 'Error al registrar el contrato',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
@@ -88,13 +115,43 @@ class ContratoController extends Controller
             ], 422);
         }
 
-        $contrato->update($request->all());
+        DB::beginTransaction();
 
-        return response()->json([
-            'status' => 200,
-            'message' => 'Contrato actualizado correctamente',
-            'data' => $contrato
-        ], 200);
+        try {
+            $contrato->update($request->all());
+
+            // Eliminar productos-módulos anteriores
+            $contrato->contratoProductoModulos()->delete();
+
+            // Registrar nuevos productos-módulos
+            if ($request->filled('productos_modulos')) {
+                foreach ($request->productos_modulos as $pm) {
+                    ContratoProductoModulo::create([
+                        'contrato_id' => $contrato->id,
+                        'producto_id' => $pm['producto_id'],
+                        'modulo_id' => $pm['modulo_id'],
+                        'precio' => $pm['precio']
+                    ]);
+                }
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 200,
+                'message' => 'Contrato actualizado correctamente',
+                'data' => $contrato->load(['cliente', 'cuotas', 'contratoProductoModulos'])
+            ], 200);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'status' => 500,
+                'message' => 'Error al actualizar el contrato',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     /**

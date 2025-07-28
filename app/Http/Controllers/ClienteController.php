@@ -3,7 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Cliente;
+use App\Models\ContactosCliente;
+use App\Models\SucursalesCliente;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 class ClienteController extends Controller
@@ -54,12 +57,21 @@ class ClienteController extends Controller
     }
 
     /**
-     * Registrar un nuevo cliente
+     * Registrar un nuevo cliente con transacciones
      */
     public function store(Request $request)
     {
+        $messages = [
+            'tipo.required' => 'El tipo es obligatorio.',
+            'tipo.in' => 'El tipo debe ser "corporacion" o "unico".',
+            'ruc.required' => 'El RUC es obligatorio.',
+            'ruc.unique' => 'Ya existe un cliente con este RUC.',
+            'razon_social.required' => 'La razón social es obligatoria.',
+            'dueno_nombre.required' => 'El nombre del dueño es obligatorio.',
+        ];
+
         $validator = Validator::make($request->all(), [
-            'tipo' => 'required|in:natural,juridico',
+            'tipo' => 'required|in:corporacion,unico',
             'ruc' => 'required|string|max:20|unique:clientes,ruc',
             'razon_social' => 'required|string|max:255',
             'dueno_nombre' => 'required|string|max:255',
@@ -68,7 +80,13 @@ class ClienteController extends Controller
             'representante_nombre' => 'nullable|string|max:255',
             'representante_celular' => 'nullable|string|max:20',
             'representante_email' => 'nullable|email|max:255',
-        ]);
+            'contactos' => 'nullable|array',
+            'contactos.*.nombre' => 'required|string',
+            'contactos.*.celular' => 'required|string',
+            'contactos.*.email' => 'required|email',
+            'sucursales' => 'nullable|array',
+            'sucursales.*.nombre' => 'required|string',
+        ], $messages);
 
         if ($validator->fails()) {
             return response()->json([
@@ -77,17 +95,51 @@ class ClienteController extends Controller
             ], 422);
         }
 
-        $cliente = Cliente::create($request->all());
+        DB::beginTransaction();
+        try {
+            $cliente = Cliente::create($request->only([
+                'tipo',
+                'ruc',
+                'razon_social',
+                'dueno_nombre',
+                'dueno_celular',
+                'dueno_email',
+                'representante_nombre',
+                'representante_celular',
+                'representante_email'
+            ]));
 
-        return response()->json([
-            'status' => 201,
-            'message' => 'Cliente creado exitosamente',
-            'data' => $cliente
-        ], 201);
+            if ($request->has('contactos')) {
+                foreach ($request->contactos as $contacto) {
+                    $cliente->contactos_clientes()->create($contacto);
+                }
+            }
+
+            if ($request->tipo === 'corporacion' && $request->has('sucursales')) {
+                foreach ($request->sucursales as $sucursal) {
+                    $cliente->sucursales_clientes()->create($sucursal);
+                }
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 201,
+                'message' => 'Cliente creado exitosamente',
+                'data' => $cliente->load('contactos_clientes', 'sucursales_clientes')
+            ], 201);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'status' => 500,
+                'message' => 'Error al crear el cliente',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
-     * Actualizar un cliente
+     * Actualizar un cliente (sin transacción aún)
      */
     public function update(Request $request, $id)
     {
@@ -100,8 +152,17 @@ class ClienteController extends Controller
             ], 404);
         }
 
+        $messages = [
+            'tipo.required' => 'El tipo es obligatorio.',
+            'tipo.in' => 'El tipo debe ser "corporacion" o "unico".',
+            'ruc.required' => 'El RUC es obligatorio.',
+            'ruc.unique' => 'Ya existe un cliente con este RUC.',
+            'razon_social.required' => 'La razón social es obligatoria.',
+            'dueno_nombre.required' => 'El nombre del dueño es obligatorio.',
+        ];
+
         $validator = Validator::make($request->all(), [
-            'tipo' => 'required|in:natural,juridico',
+            'tipo' => 'required|in:corporacion,unico',
             'ruc' => 'required|string|max:20|unique:clientes,ruc,' . $id,
             'razon_social' => 'required|string|max:255',
             'dueno_nombre' => 'required|string|max:255',
@@ -110,7 +171,13 @@ class ClienteController extends Controller
             'representante_nombre' => 'nullable|string|max:255',
             'representante_celular' => 'nullable|string|max:20',
             'representante_email' => 'nullable|email|max:255',
-        ]);
+            'contactos' => 'nullable|array',
+            'contactos.*.nombre' => 'required|string',
+            'contactos.*.celular' => 'required|string',
+            'contactos.*.email' => 'required|email',
+            'sucursales' => 'nullable|array',
+            'sucursales.*.nombre' => 'required|string',
+        ], $messages);
 
         if ($validator->fails()) {
             return response()->json([
@@ -119,13 +186,56 @@ class ClienteController extends Controller
             ], 422);
         }
 
-        $cliente->update($request->all());
+        DB::beginTransaction();
+        try {
+            $cliente->update($request->only([
+                'tipo',
+                'ruc',
+                'razon_social',
+                'dueno_nombre',
+                'dueno_celular',
+                'dueno_email',
+                'representante_nombre',
+                'representante_celular',
+                'representante_email'
+            ]));
 
-        return response()->json([
-            'status' => 200,
-            'message' => 'Cliente actualizado correctamente',
-            'data' => $cliente
-        ], 200);
+            // Eliminar contactos y volver a crearlos si se mandan nuevos
+            if ($request->has('contactos')) {
+                $cliente->contactos_clientes()->delete();
+                foreach ($request->contactos as $contacto) {
+                    $cliente->contactos_clientes()->create($contacto);
+                }
+            }
+
+            // Eliminar y crear nuevas sucursales si es corporación
+            if ($request->tipo === 'corporacion') {
+                $cliente->sucursales_clientes()->delete();
+                if ($request->has('sucursales')) {
+                    foreach ($request->sucursales as $sucursal) {
+                        $cliente->sucursales_clientes()->create($sucursal);
+                    }
+                }
+            } else {
+                // Si ya no es corporación, eliminar sucursales existentes
+                $cliente->sucursales_clientes()->delete();
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 200,
+                'message' => 'Cliente actualizado correctamente',
+                'data' => $cliente->load('contactos_clientes', 'sucursales_clientes')
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'status' => 500,
+                'message' => 'Error al actualizar el cliente',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
@@ -148,5 +258,22 @@ class ClienteController extends Controller
             'status' => 200,
             'message' => 'Cliente eliminado correctamente'
         ], 200);
+    }
+
+    public function sucursalesPorCliente($id)
+    {
+        $cliente = Cliente::with('sucursales_clientes')->find($id);
+
+        if (!$cliente) {
+            return response()->json([
+                'status' => 404,
+                'message' => 'Cliente no encontrado'
+            ], 404);
+        }
+
+        return response()->json([
+            'status' => 200,
+            'sucursales' => $cliente->sucursales_clientes
+        ]);
     }
 }

@@ -37,12 +37,11 @@ class Producto extends Model
 		'descripcion'
 	];
 
-	public function modulos()
-	{
-		return $this->belongsToMany(Modulo::class, 'contrato_producto_modulo')
-					->withPivot('id', 'contrato_id', 'precio', 'deleted_at')
-					->withTimestamps();
-	}
+public function modulos()
+{
+    return $this->hasMany(Modulo::class); // Modulo debe tener producto_id
+}
+
 
 	public function contratos()
 	{

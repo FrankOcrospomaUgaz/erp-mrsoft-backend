@@ -5,14 +5,37 @@ namespace App\Http\Controllers;
 use App\Models\Cuota;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB;
 
 class CuotaController extends Controller
 {
+    /**
+     * Listar todas las cuotas
+     */
     public function index()
     {
-        return response()->json(Cuota::with(['contrato'])->get());
+        $cuotas = Cuota::with(['contrato'])->get();
+
+        return response()->json([
+            'status' => 200,
+            'data' => $cuotas
+        ], 200);
     }
 
+    /**
+     * Mostrar una cuota específica
+     */
+    public function show(Cuota $cuota)
+    {
+        return response()->json([
+            'status' => 200,
+            'data' => $cuota->load(['contrato', 'pagos_cuota'])
+        ], 200);
+    }
+
+    /**
+     * Registrar una nueva cuota
+     */
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -20,21 +43,42 @@ class CuotaController extends Controller
             'monto' => 'required|numeric',
             'fecha_vencimiento' => 'required|date',
             'fecha_pago' => 'nullable|date',
-            'situacion' => 'required|string',
+            'situacion' => 'required|string|max:255',
         ]);
 
-        if ($validator->fails()) return response()->json($validator->errors(), 422);
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 422,
+                'errors' => $validator->errors()
+            ], 422);
+        }
 
-        $cuota = Cuota::create($request->all());
+        DB::beginTransaction();
 
-        return response()->json($cuota, 201);
+        try {
+            $cuota = Cuota::create($request->all());
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 201,
+                'message' => 'Cuota registrada exitosamente',
+                'data' => $cuota->load(['contrato'])
+            ], 201);
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'status' => 500,
+                'message' => 'Error al registrar la cuota',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
-    public function show(Cuota $cuota)
-    {
-        return response()->json($cuota->load(['contrato', 'pagos_cuota']));
-    }
-
+    /**
+     * Actualizar una cuota
+     */
     public function update(Request $request, Cuota $cuota)
     {
         $validator = Validator::make($request->all(), [
@@ -42,19 +86,57 @@ class CuotaController extends Controller
             'monto' => 'numeric',
             'fecha_vencimiento' => 'date',
             'fecha_pago' => 'nullable|date',
-            'situacion' => 'string',
+            'situacion' => 'string|max:255',
         ]);
 
-        if ($validator->fails()) return response()->json($validator->errors(), 422);
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 422,
+                'errors' => $validator->errors()
+            ], 422);
+        }
 
-        $cuota->update($request->all());
+        DB::beginTransaction();
 
-        return response()->json($cuota);
+        try {
+            $cuota->update($request->all());
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 200,
+                'message' => 'Cuota actualizada correctamente',
+                'data' => $cuota->load(['contrato'])
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'status' => 500,
+                'message' => 'Error al actualizar la cuota',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
+    /**
+     * Eliminar una cuota
+     */
     public function destroy(Cuota $cuota)
     {
-        $cuota->delete();
-        return response()->json(null, 204);
+        try {
+            $cuota->delete();
+
+            return response()->json([
+                'status' => 200,
+                'message' => 'Cuota eliminada correctamente'
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 500,
+                'message' => 'Error al eliminar la cuota',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 }

@@ -9,6 +9,7 @@ namespace App\Models;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Laravel\Sanctum\HasApiTokens;
 
 /**
  * Class Usuario
@@ -29,7 +30,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  */
 class Usuario extends Model
 {
-	use SoftDeletes;
+    use HasApiTokens, SoftDeletes;
 	protected $table = 'usuarios';
 
 	protected $casts = [

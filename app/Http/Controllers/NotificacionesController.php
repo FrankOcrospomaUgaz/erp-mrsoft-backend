@@ -2,31 +2,34 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\TiposUsuario;
+use App\Http\Controllers\Controller;
+use App\Models\Notificacione;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB;
 
-class TipoUsuarioController extends Controller
+
+class NotificacionesController extends Controller
 {
     public function index()
     {
+        $notificaciones = Notificacione::with('cliente')->latest()->get();
+
         return response()->json([
             'status' => 200,
-            'message' => 'Listado de tipos de usuario',
-            'data' => TiposUsuario::all()
+            'data' => $notificaciones
         ]);
     }
 
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'nombre' => 'required|string|max:255|unique:tipos_usuario,nombre',
+            'cliente_id' => 'required|exists:clientes,id',
+            'detalle' => 'nullable|string'
         ], [
-            'nombre.required' => 'El nombre es obligatorio.',
-            'nombre.string' => 'El nombre debe ser una cadena de texto.',
-            'nombre.max' => 'El nombre no debe superar los 255 caracteres.',
-            'nombre.unique' => 'Ya existe un tipo de usuario con ese nombre.',
+            'cliente_id.required' => 'El cliente es obligatorio.',
+            'cliente_id.exists' => 'El cliente no existe.',
+            'detalle.string' => 'El detalle debe ser un texto.'
         ]);
 
         if ($validator->fails()) {
@@ -39,23 +42,22 @@ class TipoUsuarioController extends Controller
         try {
             DB::beginTransaction();
 
-            $tipoUsuario = TiposUsuario::create([
-                'nombre' => $request->nombre,
-            ]);
+            $notificacion = Notificacione::create($request->only(['cliente_id', 'detalle']));
 
             DB::commit();
 
             return response()->json([
                 'status' => 201,
-                'message' => 'Tipo de usuario creado exitosamente',
-                'data' => $tipoUsuario
+                'message' => 'Notificación creada exitosamente.',
+                'data' => $notificacion
             ], 201);
+
         } catch (\Exception $e) {
             DB::rollBack();
 
             return response()->json([
                 'status' => 500,
-                'message' => 'Error al crear el tipo de usuario',
+                'message' => 'Error al registrar la notificación.',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -63,40 +65,35 @@ class TipoUsuarioController extends Controller
 
     public function show($id)
     {
-        $tipo = TiposUsuario::find($id);
+        $notificacion = Notificacione::with('cliente')->find($id);
 
-        if (!$tipo) {
+        if (!$notificacion) {
             return response()->json([
                 'status' => 404,
-                'message' => 'Tipo de usuario no encontrado'
+                'message' => 'Notificación no encontrada.'
             ], 404);
         }
 
         return response()->json([
             'status' => 200,
-            'message' => 'Detalle del tipo de usuario',
-            'data' => $tipo
+            'data' => $notificacion
         ]);
     }
 
     public function update(Request $request, $id)
     {
-        $tipo = TiposUsuario::find($id);
+        $notificacion = Notificacione::find($id);
 
-        if (!$tipo) {
+        if (!$notificacion) {
             return response()->json([
                 'status' => 404,
-                'message' => 'Tipo de usuario no encontrado'
+                'message' => 'Notificación no encontrada.'
             ], 404);
         }
 
         $validator = Validator::make($request->all(), [
-            'nombre' => 'required|string|max:255|unique:tipos_usuario,nombre,' . $id,
-        ], [
-            'nombre.required' => 'El nombre es obligatorio.',
-            'nombre.string' => 'El nombre debe ser una cadena de texto.',
-            'nombre.max' => 'El nombre no debe superar los 255 caracteres.',
-            'nombre.unique' => 'Ya existe un tipo de usuario con ese nombre.',
+            'cliente_id' => 'required|exists:clientes,id',
+            'detalle' => 'nullable|string'
         ]);
 
         if ($validator->fails()) {
@@ -109,23 +106,21 @@ class TipoUsuarioController extends Controller
         try {
             DB::beginTransaction();
 
-            $tipo->update([
-                'nombre' => $request->nombre,
-            ]);
+            $notificacion->update($request->only(['cliente_id', 'detalle']));
 
             DB::commit();
 
             return response()->json([
                 'status' => 200,
-                'message' => 'Tipo de usuario actualizado exitosamente',
-                'data' => $tipo
+                'message' => 'Notificación actualizada correctamente.',
+                'data' => $notificacion
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
 
             return response()->json([
                 'status' => 500,
-                'message' => 'Error al actualizar el tipo de usuario',
+                'message' => 'Error al actualizar la notificación.',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -133,26 +128,26 @@ class TipoUsuarioController extends Controller
 
     public function destroy($id)
     {
-        $tipo = TiposUsuario::find($id);
+        $notificacion = Notificacione::find($id);
 
-        if (!$tipo) {
+        if (!$notificacion) {
             return response()->json([
                 'status' => 404,
-                'message' => 'Tipo de usuario no encontrado'
+                'message' => 'Notificación no encontrada.'
             ], 404);
         }
 
         try {
-            $tipo->delete();
+            $notificacion->delete();
 
             return response()->json([
                 'status' => 200,
-                'message' => 'Tipo de usuario eliminado correctamente'
+                'message' => 'Notificación eliminada correctamente.'
             ]);
         } catch (\Exception $e) {
             return response()->json([
                 'status' => 500,
-                'message' => 'Error al eliminar el tipo de usuario',
+                'message' => 'Error al eliminar la notificación.',
                 'error' => $e->getMessage()
             ], 500);
         }
