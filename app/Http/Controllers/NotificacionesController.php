@@ -7,19 +7,35 @@ use App\Models\Notificacione;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use App\Http\Resources\NotificacioneResource;
 
 
 class NotificacionesController extends Controller
 {
-    public function index()
-    {
-        $notificaciones = Notificacione::with('cliente')->latest()->get();
 
-        return response()->json([
-            'status' => 200,
-            'data' => $notificaciones
-        ]);
-    }
+public function index(Request $request)
+{
+    $notificaciones = Notificacione::with('cliente')->latest()->paginate($request->get('per_page', 5));
+
+    return response()->json([
+        'data' => NotificacioneResource::collection($notificaciones->items()),
+        'links' => [
+            'first' => $notificaciones->url(1),
+            'last' => $notificaciones->url($notificaciones->lastPage()),
+            'prev' => $notificaciones->previousPageUrl(),
+            'next' => $notificaciones->nextPageUrl(),
+        ],
+        'meta' => [
+            'current_page' => $notificaciones->currentPage(),
+            'from' => $notificaciones->firstItem(),
+            'last_page' => $notificaciones->lastPage(),
+            'path' => $notificaciones->path(),
+            'per_page' => $notificaciones->perPage(),
+            'to' => $notificaciones->lastItem(),
+            'total' => $notificaciones->total(),
+        ]
+    ]);
+}
 
     public function store(Request $request)
     {

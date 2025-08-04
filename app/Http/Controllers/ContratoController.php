@@ -6,21 +6,37 @@ use App\Models\{Contrato, Cliente, ContratoProductoModulo};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use App\Http\Resources\ContratoResource;
 
 class ContratoController extends Controller
 {
     /**
      * Listar todos los contratos
      */
-    public function index()
-    {
-        $contratos = Contrato::with(['cliente', 'cuotas', 'contratoProductoModulos'])->get();
 
-        return response()->json([
-            'status' => 200,
-            'data' => $contratos
-        ], 200);
-    }
+public function index(Request $request)
+{
+    $contratos = Contrato::with(['cliente', 'cuotas', 'contratoProductoModulos'])->paginate($request->get('per_page', 5));
+
+    return response()->json([
+        'data' => ContratoResource::collection($contratos->items()),
+        'links' => [
+            'first' => $contratos->url(1),
+            'last' => $contratos->url($contratos->lastPage()),
+            'prev' => $contratos->previousPageUrl(),
+            'next' => $contratos->nextPageUrl(),
+        ],
+        'meta' => [
+            'current_page' => $contratos->currentPage(),
+            'from' => $contratos->firstItem(),
+            'last_page' => $contratos->lastPage(),
+            'path' => $contratos->path(),
+            'per_page' => $contratos->perPage(),
+            'to' => $contratos->lastItem(),
+            'total' => $contratos->total(),
+        ]
+    ]);
+}
 
     /**
      * Mostrar un contrato específico

@@ -7,22 +7,36 @@ use App\Models\Modulo;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use App\Http\Resources\ProductoResource;
 
 class ProductoController extends Controller
 {
     /**
      * Listar todos los productos
      */
-    public function index()
-    {
-        $productos = Producto::with(['modulos', 'avisos_saas'])->get();
+public function index(Request $request)
+{
+    $productos = Producto::with(['modulos', 'avisos_saas'])->paginate($request->get('per_page', 5));
 
-        return response()->json([
-            'status' => 200,
-            'data' => $productos
-        ], 200);
-    }
-
+    return response()->json([
+        'data' => ProductoResource::collection($productos->items()),
+        'links' => [
+            'first' => $productos->url(1),
+            'last' => $productos->url($productos->lastPage()),
+            'prev' => $productos->previousPageUrl(),
+            'next' => $productos->nextPageUrl(),
+        ],
+        'meta' => [
+            'current_page' => $productos->currentPage(),
+            'from' => $productos->firstItem(),
+            'last_page' => $productos->lastPage(),
+            'path' => $productos->path(),
+            'per_page' => $productos->perPage(),
+            'to' => $productos->lastItem(),
+            'total' => $productos->total(),
+        ]
+    ]);
+}
     /**
      * Mostrar un producto específico
      */

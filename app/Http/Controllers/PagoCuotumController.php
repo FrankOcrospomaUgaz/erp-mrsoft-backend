@@ -7,19 +7,34 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use App\Http\Resources\PagosCuotumResource;
 
 class PagoCuotumController extends Controller
 {
-    public function index()
+
+    public function index(Request $request)
     {
-        $pagos = PagosCuotum::with('cuota')->get();
+        $pagos = PagosCuotum::with('cuota')->paginate($request->get('per_page', 5));
 
         return response()->json([
-            'status' => 200,
-            'data' => $pagos
+            'data' => PagosCuotumResource::collection($pagos->items()),
+            'links' => [
+                'first' => $pagos->url(1),
+                'last' => $pagos->url($pagos->lastPage()),
+                'prev' => $pagos->previousPageUrl(),
+                'next' => $pagos->nextPageUrl(),
+            ],
+            'meta' => [
+                'current_page' => $pagos->currentPage(),
+                'from' => $pagos->firstItem(),
+                'last_page' => $pagos->lastPage(),
+                'path' => $pagos->path(),
+                'per_page' => $pagos->perPage(),
+                'to' => $pagos->lastItem(),
+                'total' => $pagos->total(),
+            ]
         ]);
     }
-
     public function store(Request $request)
     {
         $messages = [
@@ -141,7 +156,9 @@ class PagoCuotumController extends Controller
             }
 
             $pago->update($request->only([
-                'cuota_id', 'fecha_pago', 'monto_pagado'
+                'cuota_id',
+                'fecha_pago',
+                'monto_pagado'
             ]));
 
             DB::commit();

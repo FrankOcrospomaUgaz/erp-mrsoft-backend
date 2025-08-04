@@ -8,28 +8,43 @@ use App\Models\SucursalesCliente;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
-
+use App\Http\Resources\ClienteResource;
 class ClienteController extends Controller
 {
     /**
      * Listar todos los clientes
      */
-    public function index()
-    {
-        $clientes = Cliente::with([
-            'contactos_clientes',
-            'contratos',
-            'sucursales_clientes',
-            'notificaciones',
-            'avisos_saas'
-        ])->get();
 
-        return response()->json([
-            'status' => 200,
-            'data' => $clientes
-        ], 200);
-    }
 
+public function index(Request $request)
+{
+    $clientes = Cliente::with([
+        'contactos_clientes',
+        'contratos',
+        'sucursales_clientes',
+        'notificaciones',
+        'avisos_saas'
+    ])->paginate($request->get('per_page', 5));
+
+    return response()->json([
+        'data' => ClienteResource::collection($clientes->items()),
+        'links' => [
+            'first' => $clientes->url(1),
+            'last' => $clientes->url($clientes->lastPage()),
+            'prev' => $clientes->previousPageUrl(),
+            'next' => $clientes->nextPageUrl(),
+        ],
+        'meta' => [
+            'current_page' => $clientes->currentPage(),
+            'from' => $clientes->firstItem(),
+            'last_page' => $clientes->lastPage(),
+            'path' => $clientes->path(),
+            'per_page' => $clientes->perPage(),
+            'to' => $clientes->lastItem(),
+            'total' => $clientes->total(),
+        ]
+    ]);
+}
     /**
      * Mostrar un cliente específico
      */

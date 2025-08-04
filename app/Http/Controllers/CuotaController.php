@@ -6,22 +6,37 @@ use App\Models\Cuota;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
-
+use App\Http\Resources\CuotaResource;
 class CuotaController extends Controller
 {
     /**
      * Listar todas las cuotas
      */
-    public function index()
-    {
-        $cuotas = Cuota::with(['contrato'])->get();
 
-        return response()->json([
-            'status' => 200,
-            'data' => $cuotas
-        ], 200);
-    }
 
+public function index(Request $request)
+{
+    $cuotas = Cuota::with(['contrato'])->paginate($request->get('per_page', 5));
+
+    return response()->json([
+        'data' => CuotaResource::collection($cuotas->items()),
+        'links' => [
+            'first' => $cuotas->url(1),
+            'last' => $cuotas->url($cuotas->lastPage()),
+            'prev' => $cuotas->previousPageUrl(),
+            'next' => $cuotas->nextPageUrl(),
+        ],
+        'meta' => [
+            'current_page' => $cuotas->currentPage(),
+            'from' => $cuotas->firstItem(),
+            'last_page' => $cuotas->lastPage(),
+            'path' => $cuotas->path(),
+            'per_page' => $cuotas->perPage(),
+            'to' => $cuotas->lastItem(),
+            'total' => $cuotas->total(),
+        ]
+    ]);
+}
     /**
      * Mostrar una cuota específica
      */

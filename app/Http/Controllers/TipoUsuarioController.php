@@ -6,18 +6,33 @@ use App\Models\TiposUsuario;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use App\Http\Resources\TiposUsuarioResource;
 
 class TipoUsuarioController extends Controller
 {
-    public function index()
-    {
-        return response()->json([
-            'status' => 200,
-            'message' => 'Listado de tipos de usuario',
-            'data' => TiposUsuario::all()
-        ]);
-    }
+public function index(Request $request)
+{
+    $tiposUsuario = TiposUsuario::paginate($request->get('per_page', 5));
 
+    return response()->json([
+        'data' => TiposUsuarioResource::collection($tiposUsuario->items()),
+        'links' => [
+            'first' => $tiposUsuario->url(1),
+            'last' => $tiposUsuario->url($tiposUsuario->lastPage()),
+            'prev' => $tiposUsuario->previousPageUrl(),
+            'next' => $tiposUsuario->nextPageUrl(),
+        ],
+        'meta' => [
+            'current_page' => $tiposUsuario->currentPage(),
+            'from' => $tiposUsuario->firstItem(),
+            'last_page' => $tiposUsuario->lastPage(),
+            'path' => $tiposUsuario->path(),
+            'per_page' => $tiposUsuario->perPage(),
+            'to' => $tiposUsuario->lastItem(),
+            'total' => $tiposUsuario->total(),
+        ]
+    ]);
+}
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
