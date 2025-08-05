@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use App\Models\Usuario;
+use Illuminate\Support\Facades\Auth;
 
 class AuthController extends Controller
 {
@@ -42,4 +43,23 @@ class AuthController extends Controller
     {
         return response()->json($request->user());
     }
+
+
+public function authenticate(Request $request)
+{
+    $user = Auth::guard('sanctum')->user();
+
+    if ($user) {
+        // Recupera el token enviado
+        $token = $request->bearerToken();
+
+        return response()->json([
+            'access_token' => $token,
+            'token_type' => 'Bearer',
+            'usuario' => $user,
+        ]);
+    } else {
+        return response()->json(['message' => 'User not authenticated'], 401);
+    }
+}
 }

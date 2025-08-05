@@ -17,6 +17,8 @@ class TiposUsuarioResource extends JsonResource
         return [
             'id'     => $this->id,
             'nombre' => $this->nombre,
+            'created_at' => $this->created_at,
+            'updated_at' => $this->updated_at,
         ];
     }
 }
