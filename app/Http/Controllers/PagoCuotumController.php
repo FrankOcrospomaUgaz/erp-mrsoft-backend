@@ -12,29 +12,55 @@ use App\Http\Resources\PagosCuotumResource;
 class PagoCuotumController extends Controller
 {
 
-    public function index(Request $request)
-    {
-        $pagos = PagosCuotum::with('cuota')->paginate($request->get('per_page', 5));
+public function index(Request $request)
+{
+    $query = PagosCuotum::with('cuota');
 
-        return response()->json([
-            'data' => PagosCuotumResource::collection($pagos->items()),
-            'links' => [
-                'first' => $pagos->url(1),
-                'last' => $pagos->url($pagos->lastPage()),
-                'prev' => $pagos->previousPageUrl(),
-                'next' => $pagos->nextPageUrl(),
-            ],
-            'meta' => [
-                'current_page' => $pagos->currentPage(),
-                'from' => $pagos->firstItem(),
-                'last_page' => $pagos->lastPage(),
-                'path' => $pagos->path(),
-                'per_page' => $pagos->perPage(),
-                'to' => $pagos->lastItem(),
-                'total' => $pagos->total(),
-            ]
-        ]);
+    // 🔍 Búsqueda por comprobante
+    if ($request->filled('search')) {
+        $query->where('comprobante', 'ILIKE', "%{$request->search}%");
     }
+
+    // 📅 Filtrar por fecha de pago
+    if ($request->filled('fecha_inicio') && $request->filled('fecha_fin')) {
+        $query->whereBetween('fecha_pago', [$request->fecha_inicio, $request->fecha_fin]);
+    } elseif ($request->filled('fecha_inicio')) {
+        $query->whereDate('fecha_pago', '>=', $request->fecha_inicio);
+    } elseif ($request->filled('fecha_fin')) {
+        $query->whereDate('fecha_pago', '<=', $request->fecha_fin);
+    }
+
+    // 💰 Filtrar por rango de montos
+    if ($request->filled('monto_min')) {
+        $query->where('monto_pagado', '>=', $request->monto_min);
+    }
+    if ($request->filled('monto_max')) {
+        $query->where('monto_pagado', '<=', $request->monto_max);
+    }
+
+    // 📑 Paginación
+    $pagos = $query->paginate($request->get('per_page', 5));
+
+    return response()->json([
+        'data' => PagosCuotumResource::collection($pagos->items()),
+        'links' => [
+            'first' => $pagos->url(1),
+            'last' => $pagos->url($pagos->lastPage()),
+            'prev' => $pagos->previousPageUrl(),
+            'next' => $pagos->nextPageUrl(),
+        ],
+        'meta' => [
+            'current_page' => $pagos->currentPage(),
+            'from' => $pagos->firstItem(),
+            'last_page' => $pagos->lastPage(),
+            'path' => $pagos->path(),
+            'per_page' => $pagos->perPage(),
+            'to' => $pagos->lastItem(),
+            'total' => $pagos->total(),
+        ]
+    ]);
+}
+
     public function store(Request $request)
     {
         $messages = [

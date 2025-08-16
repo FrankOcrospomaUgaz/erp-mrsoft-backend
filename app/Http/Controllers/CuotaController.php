@@ -13,10 +13,55 @@ class CuotaController extends Controller
      * Listar todas las cuotas
      */
 
-
 public function index(Request $request)
 {
-    $cuotas = Cuota::with(['contrato'])->paginate($request->get('per_page', 5));
+    $query = Cuota::with(['contrato.cliente']);
+
+    // 🔎 Búsqueda global
+    if ($request->filled('search')) {
+        $search = $request->get('search');
+
+        $query->where(function ($q) use ($search) {
+            $q->where('situacion', 'ILIKE', "%{$search}%")
+              ->orWhere('monto', '::text ILIKE', "%{$search}%") // buscar monto como texto
+              ->orWhereHas('contrato', function ($q2) use ($search) {
+                  $q2->where('numero', 'ILIKE', "%{$search}%")
+                     ->orWhere('tipo_contrato', 'ILIKE', "%{$search}%")
+                     ->orWhereHas('cliente', function ($q3) use ($search) {
+                         $q3->where('razon_social', 'ILIKE', "%{$search}%")
+                            ->orWhere('ruc', 'ILIKE', "%{$search}%");
+                     });
+              });
+        });
+    }
+
+    // 📅 Filtros por fecha de vencimiento
+    if ($request->filled('fecha_vencimiento_desde')) {
+        $query->whereDate('fecha_vencimiento', '>=', $request->get('fecha_vencimiento_desde'));
+    }
+    if ($request->filled('fecha_vencimiento_hasta')) {
+        $query->whereDate('fecha_vencimiento', '<=', $request->get('fecha_vencimiento_hasta'));
+    }
+
+    // 📅 Filtros por fecha de pago
+    if ($request->filled('fecha_pago_desde')) {
+        $query->whereDate('fecha_pago', '>=', $request->get('fecha_pago_desde'));
+    }
+    if ($request->filled('fecha_pago_hasta')) {
+        $query->whereDate('fecha_pago', '<=', $request->get('fecha_pago_hasta'));
+    }
+
+    // ⚡ Filtro por situacion
+    if ($request->filled('situacion')) {
+        $query->where('situacion', $request->get('situacion'));
+    }
+
+    // ⚡ Filtro por contrato específico
+    if ($request->filled('contrato_id')) {
+        $query->where('contrato_id', $request->get('contrato_id'));
+    }
+
+    $cuotas = $query->paginate($request->get('per_page', 5));
 
     return response()->json([
         'data' => CuotaResource::collection($cuotas->items()),
@@ -37,6 +82,7 @@ public function index(Request $request)
         ]
     ]);
 }
+
     /**
      * Mostrar una cuota específica
      */

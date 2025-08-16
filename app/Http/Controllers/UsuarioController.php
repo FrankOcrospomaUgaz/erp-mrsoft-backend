@@ -13,7 +13,21 @@ class UsuarioController extends Controller
 
 public function index(Request $request)
 {
-    $usuarios = Usuario::with('tipos_usuario')->paginate($request->get('per_page', 5));
+    $search = $request->get('search'); // palabra a buscar
+    $perPage = $request->get('per_page', 5);
+
+    $usuarios = Usuario::with('tipos_usuario')
+        ->when($search, function ($query, $search) {
+            return $query->where(function ($q) use ($search) {
+                $q->where('nombres', 'ILIKE', "%{$search}%")
+                  ->orWhere('apellidos', 'ILIKE', "%{$search}%")
+                  ->orWhere('usuario', 'ILIKE', "%{$search}%")
+                  ->orWhereHas('tipos_usuario', function ($q2) use ($search) {
+                      $q2->where('nombre', 'ILIKE', "%{$search}%");
+                  });
+            });
+        })
+        ->paginate($perPage);
 
     return response()->json([
         'data' => UsuarioResource::collection($usuarios->items()),
@@ -34,6 +48,7 @@ public function index(Request $request)
         ]
     ]);
 }
+
 
 
     public function store(Request $request)

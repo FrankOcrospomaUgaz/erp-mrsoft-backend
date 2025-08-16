@@ -16,7 +16,45 @@ class ProductoController extends Controller
      */
 public function index(Request $request)
 {
-    $productos = Producto::with(['modulos', 'avisos_saas'])->paginate($request->get('per_page', 5));
+    $search = $request->get('search');
+    $perPage = $request->get('per_page', 5);
+
+    $productos = Producto::with([
+        'modulos.contratos',
+        'contratos',
+        'avisos_saas'
+    ])
+    ->when($search, function ($query, $search) {
+        $query->where(function ($q) use ($search) {
+            // Búsqueda en productos
+            $q->where('nombre', 'ILIKE', "%{$search}%")
+              ->orWhere('descripcion', 'ILIKE', "%{$search}%");
+        });
+
+        // Búsqueda en módulos relacionados
+        $query->orWhereHas('modulos', function ($q) use ($search) {
+            $q->where('nombre', 'ILIKE', "%{$search}%")
+              ->orWhere('precio_unitario', 'ILIKE', "%{$search}%");
+        });
+
+        // Búsqueda en contratos relacionados al producto
+        $query->orWhereHas('contratos', function ($q) use ($search) {
+            $q->where('numero', 'ILIKE', "%{$search}%")
+              ->orWhere('tipo_contrato', 'ILIKE', "%{$search}%")
+              ->orWhere('forma_pago', 'ILIKE', "%{$search}%")
+              ->orWhere('total', 'ILIKE', "%{$search}%");
+        });
+
+        // Búsqueda en contratos relacionados a los módulos del producto
+        $query->orWhereHas('modulos.contratos', function ($q) use ($search) {
+            $q->where('numero', 'ILIKE', "%{$search}%")
+              ->orWhere('tipo_contrato', 'ILIKE', "%{$search}%")
+              ->orWhere('forma_pago', 'ILIKE', "%{$search}%")
+              ->orWhere('total', 'ILIKE', "%{$search}%");
+        });
+    })
+    ->latest()
+    ->paginate($perPage);
 
     return response()->json([
         'data' => ProductoResource::collection($productos->items()),
@@ -37,6 +75,7 @@ public function index(Request $request)
         ]
     ]);
 }
+
     /**
      * Mostrar un producto específico
      */

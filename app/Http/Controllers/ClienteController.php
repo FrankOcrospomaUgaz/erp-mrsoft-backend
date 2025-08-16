@@ -18,13 +18,37 @@ class ClienteController extends Controller
 
 public function index(Request $request)
 {
+    $search = $request->get('search');
+    $perPage = $request->get('per_page', 5);
+
     $clientes = Cliente::with([
         'contactos_clientes',
         'contratos',
         'sucursales_clientes',
         'notificaciones',
         'avisos_saas'
-    ])->paginate($request->get('per_page', 5));
+    ])
+    ->when($search, function ($query, $search) {
+        $query->where(function ($q) use ($search) {
+            // Búsqueda en tabla clientes
+            $q->where('ruc', 'ILIKE', "%{$search}%")
+              ->orWhere('razon_social', 'ILIKE', "%{$search}%")
+              ->orWhere('dueno_nombre', 'ILIKE', "%{$search}%")
+              ->orWhere('dueno_celular', 'ILIKE', "%{$search}%")
+              ->orWhere('dueno_email', 'ILIKE', "%{$search}%")
+              ->orWhere('representante_nombre', 'ILIKE', "%{$search}%")
+              ->orWhere('representante_celular', 'ILIKE', "%{$search}%")
+              ->orWhere('representante_email', 'ILIKE', "%{$search}%");
+        });
+
+        // Búsqueda en contactos relacionados
+        $query->orWhereHas('contactos_clientes', function ($q) use ($search) {
+            $q->where('nombre', 'ILIKE', "%{$search}%")
+              ->orWhere('celular', 'ILIKE', "%{$search}%")
+              ->orWhere('email', 'ILIKE', "%{$search}%");
+        });
+    })
+    ->paginate($perPage);
 
     return response()->json([
         'data' => ClienteResource::collection($clientes->items()),
@@ -45,6 +69,7 @@ public function index(Request $request)
         ]
     ]);
 }
+
     /**
      * Mostrar un cliente específico
      */

@@ -16,7 +16,25 @@ class ContratoController extends Controller
 
 public function index(Request $request)
 {
-    $contratos = Contrato::with(['cliente', 'cuotas', 'contratoProductoModulos'])->paginate($request->get('per_page', 5));
+    $query = Contrato::with(['cliente', 'cuotas', 'contratoProductoModulos']);
+
+    // Filtro de búsqueda
+    if ($request->filled('search')) {
+        $search = $request->get('search');
+
+        $query->where(function ($q) use ($search) {
+            $q->where('numero', 'ILIKE', "%{$search}%")
+              ->orWhere('tipo_contrato', 'ILIKE', "%{$search}%")
+              ->orWhereHas('cliente', function ($q2) use ($search) {
+                  $q2->where('razon_social', 'ILIKE', "%{$search}%")
+                     ->orWhere('ruc', 'ILIKE', "%{$search}%")
+                     ->orWhere('dueno_nombre', 'ILIKE', "%{$search}%")
+                     ->orWhere('representante_nombre', 'ILIKE', "%{$search}%");
+              });
+        });
+    }
+
+    $contratos = $query->paginate($request->get('per_page', 5));
 
     return response()->json([
         'data' => ContratoResource::collection($contratos->items()),
@@ -37,6 +55,7 @@ public function index(Request $request)
         ]
     ]);
 }
+
 
     /**
      * Mostrar un contrato específico

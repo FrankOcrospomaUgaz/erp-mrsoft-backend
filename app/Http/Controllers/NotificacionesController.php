@@ -15,7 +15,26 @@ class NotificacionesController extends Controller
 
 public function index(Request $request)
 {
-    $notificaciones = Notificacione::with('cliente')->latest()->paginate($request->get('per_page', 5));
+    $search = $request->get('search');
+
+    $notificaciones = Notificacione::with('cliente')
+        ->when($search, function ($query, $search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('detalle', 'ILIKE', "%{$search}%")
+                  ->orWhereHas('cliente', function ($q2) use ($search) {
+                      $q2->where('razon_social', 'ILIKE', "%{$search}%")
+                         ->orWhere('ruc', 'ILIKE', "%{$search}%")
+                         ->orWhere('dueno_nombre', 'ILIKE', "%{$search}%")
+                         ->orWhere('dueno_celular', 'ILIKE', "%{$search}%")
+                         ->orWhere('dueno_email', 'ILIKE', "%{$search}%")
+                         ->orWhere('representante_nombre', 'ILIKE', "%{$search}%")
+                         ->orWhere('representante_celular', 'ILIKE', "%{$search}%")
+                         ->orWhere('representante_email', 'ILIKE', "%{$search}%");
+                  });
+            });
+        })
+        ->latest()
+        ->paginate($request->get('per_page', 5));
 
     return response()->json([
         'data' => NotificacioneResource::collection($notificaciones->items()),
@@ -36,6 +55,7 @@ public function index(Request $request)
         ]
     ]);
 }
+
 
     public function store(Request $request)
     {
