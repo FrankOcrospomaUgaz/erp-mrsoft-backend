@@ -16,7 +16,7 @@ return new class extends Migration
             $table->foreignId('cuota_id')->constrained('cuotas');
             $table->date('fecha_pago');
             $table->decimal('monto_pagado', 10, 2);
-            $table->string('comprobante')->nullable(); // Ruta del archivo (voucher, imagen)
+            $table->string('comprobante')->nullable(); 
             $table->timestamps();
             $table->softDeletes();
         });

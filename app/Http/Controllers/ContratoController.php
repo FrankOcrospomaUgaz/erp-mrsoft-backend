@@ -192,22 +192,48 @@ public function index(Request $request)
     /**
      * Eliminar un contrato
      */
-    public function destroy($id)
-    {
-        $contrato = Contrato::find($id);
+public function destroy($id)
+{
+    $contrato = Contrato::find($id);
 
-        if (!$contrato) {
-            return response()->json([
-                'status' => 404,
-                'message' => 'Contrato no encontrado'
-            ], 404);
-        }
+    if (!$contrato) {
+        return response()->json([
+            'status' => 404,
+            'message' => 'Contrato no encontrado'
+        ], 404);
+    }
 
-        $contrato->delete();
+    DB::beginTransaction();
+
+    try {
+        // Marcar como eliminadas (soft delete) las relaciones
+        $contrato->contratoProductoModulos()->each(function ($pm) {
+            $pm->delete(); // SoftDelete
+        });
+
+        $contrato->cuotas()->each(function ($cuota) {
+            $cuota->delete(); // SoftDelete
+        });
+
+        // Finalmente marcar como eliminado el contrato
+        $contrato->delete(); // SoftDelete
+
+        DB::commit();
 
         return response()->json([
             'status' => 200,
-            'message' => 'Contrato eliminado correctamente'
+            'message' => 'Contrato y sus relaciones eliminados correctamente'
         ], 200);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+
+        return response()->json([
+            'status' => 500,
+            'message' => 'Error al eliminar el contrato',
+            'error' => $e->getMessage()
+        ], 500);
     }
+}
+
 }

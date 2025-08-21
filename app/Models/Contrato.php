@@ -3,11 +3,11 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-
+use Illuminate\Database\Eloquent\SoftDeletes;
 class Contrato extends Model
 {
     public $table = 'contratos';
-
+    use SoftDeletes;
     public $fillable = [
         'fecha_inicio',
         'fecha_fin',
