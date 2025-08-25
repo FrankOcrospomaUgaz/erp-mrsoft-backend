@@ -20,7 +20,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * @property Carbon|null $updated_at
  * @property string|null $deleted_at
  * 
- * @property Cliente $cliente
+ * @property Contrato $contrato
  *
  * @package App\Models
  */
@@ -30,16 +30,16 @@ class Notificacione extends Model
 	protected $table = 'notificaciones';
 
 	protected $casts = [
-		'cliente_id' => 'int'
+		'contrato_id' => 'int'
 	];
 
 	protected $fillable = [
-		'cliente_id',
+		'contrato_id',
 		'detalle'
 	];
 
-	public function cliente()
+	public function contrato()
 	{
-		return $this->belongsTo(Cliente::class);
+		return $this->belongsTo(Contrato::class);
 	}
 }

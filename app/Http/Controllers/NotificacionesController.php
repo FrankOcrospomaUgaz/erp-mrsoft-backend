@@ -13,58 +13,58 @@ use App\Http\Resources\NotificacioneResource;
 class NotificacionesController extends Controller
 {
 
-public function index(Request $request)
-{
-    $search = $request->get('search');
+    public function index(Request $request)
+    {
+        $search = $request->get('search');
 
-    $notificaciones = Notificacione::with('cliente')
-        ->when($search, function ($query, $search) {
-            $query->where(function ($q) use ($search) {
-                $q->where('detalle', 'ILIKE', "%{$search}%")
-                  ->orWhereHas('cliente', function ($q2) use ($search) {
-                      $q2->where('razon_social', 'ILIKE', "%{$search}%")
-                         ->orWhere('ruc', 'ILIKE', "%{$search}%")
-                         ->orWhere('dueno_nombre', 'ILIKE', "%{$search}%")
-                         ->orWhere('dueno_celular', 'ILIKE', "%{$search}%")
-                         ->orWhere('dueno_email', 'ILIKE', "%{$search}%")
-                         ->orWhere('representante_nombre', 'ILIKE', "%{$search}%")
-                         ->orWhere('representante_celular', 'ILIKE', "%{$search}%")
-                         ->orWhere('representante_email', 'ILIKE', "%{$search}%");
-                  });
-            });
-        })
-        ->latest()
-        ->paginate($request->get('per_page', 5));
+        $notificaciones = Notificacione::with('contrato.cliente')
+            ->when($search, function ($query, $search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('detalle', 'ILIKE', "%{$search}%")
+                        ->orWhereHas('contrato.cliente', function ($q2) use ($search) {
+                            $q2->where('razon_social', 'ILIKE', "%{$search}%")
+                                ->orWhere('ruc', 'ILIKE', "%{$search}%")
+                                ->orWhere('dueno_nombre', 'ILIKE', "%{$search}%")
+                                ->orWhere('dueno_celular', 'ILIKE', "%{$search}%")
+                                ->orWhere('dueno_email', 'ILIKE', "%{$search}%")
+                                ->orWhere('representante_nombre', 'ILIKE', "%{$search}%")
+                                ->orWhere('representante_celular', 'ILIKE', "%{$search}%")
+                                ->orWhere('representante_email', 'ILIKE', "%{$search}%");
+                        });
+                });
+            })
+            ->latest()
+            ->paginate($request->get('per_page', 5));
 
-    return response()->json([
-        'data' => NotificacioneResource::collection($notificaciones->items()),
-        'links' => [
-            'first' => $notificaciones->url(1),
-            'last' => $notificaciones->url($notificaciones->lastPage()),
-            'prev' => $notificaciones->previousPageUrl(),
-            'next' => $notificaciones->nextPageUrl(),
-        ],
-        'meta' => [
-            'current_page' => $notificaciones->currentPage(),
-            'from' => $notificaciones->firstItem(),
-            'last_page' => $notificaciones->lastPage(),
-            'path' => $notificaciones->path(),
-            'per_page' => $notificaciones->perPage(),
-            'to' => $notificaciones->lastItem(),
-            'total' => $notificaciones->total(),
-        ]
-    ]);
-}
+        return response()->json([
+            'data' => NotificacioneResource::collection($notificaciones->items()),
+            'links' => [
+                'first' => $notificaciones->url(1),
+                'last' => $notificaciones->url($notificaciones->lastPage()),
+                'prev' => $notificaciones->previousPageUrl(),
+                'next' => $notificaciones->nextPageUrl(),
+            ],
+            'meta' => [
+                'current_page' => $notificaciones->currentPage(),
+                'from' => $notificaciones->firstItem(),
+                'last_page' => $notificaciones->lastPage(),
+                'path' => $notificaciones->path(),
+                'per_page' => $notificaciones->perPage(),
+                'to' => $notificaciones->lastItem(),
+                'total' => $notificaciones->total(),
+            ]
+        ]);
+    }
 
 
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'cliente_id' => 'required|exists:clientes,id',
+            'contrato_id' => 'required|exists:contratos,id',
             'detalle' => 'nullable|string'
         ], [
-            'cliente_id.required' => 'El cliente es obligatorio.',
-            'cliente_id.exists' => 'El cliente no existe.',
+            'contrato_id.required' => 'El contrato es obligatorio.',
+            'contrato_id.exists' => 'El contrato no existe.',
             'detalle.string' => 'El detalle debe ser un texto.'
         ]);
 
@@ -78,7 +78,7 @@ public function index(Request $request)
         try {
             DB::beginTransaction();
 
-            $notificacion = Notificacione::create($request->only(['cliente_id', 'detalle']));
+            $notificacion = Notificacione::create($request->only(['contrato_id', 'detalle']));
 
             DB::commit();
 
@@ -87,7 +87,6 @@ public function index(Request $request)
                 'message' => 'Notificación creada exitosamente.',
                 'data' => $notificacion
             ], 201);
-
         } catch (\Exception $e) {
             DB::rollBack();
 
@@ -101,7 +100,7 @@ public function index(Request $request)
 
     public function show($id)
     {
-        $notificacion = Notificacione::with('cliente')->find($id);
+        $notificacion = Notificacione::with('contrato')->find($id);
 
         if (!$notificacion) {
             return response()->json([
@@ -128,7 +127,7 @@ public function index(Request $request)
         }
 
         $validator = Validator::make($request->all(), [
-            'cliente_id' => 'required|exists:clientes,id',
+            'contrato_id' => 'required|exists:contratos,id',
             'detalle' => 'nullable|string'
         ]);
 
@@ -142,7 +141,7 @@ public function index(Request $request)
         try {
             DB::beginTransaction();
 
-            $notificacion->update($request->only(['cliente_id', 'detalle']));
+            $notificacion->update($request->only(['contrato_id', 'detalle']));
 
             DB::commit();
 

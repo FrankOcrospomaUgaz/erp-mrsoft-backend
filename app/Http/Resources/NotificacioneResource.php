@@ -16,7 +16,7 @@ class NotificacioneResource extends JsonResource
     {
         return [
             'id' => $this->id,
-            'cliente_id' => $this->cliente_id,
+            'contrato_id' => $this->contrato_id,
             'detalle' => $this->detalle,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
