@@ -31,7 +31,6 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * @property Collection|ContactosCliente[] $contactos_clientes
  * @property Collection|Contrato[] $contratos
  * @property Collection|SucursalesCliente[] $sucursales_clientes
- * @property Collection|Notificacione[] $notificaciones
  * @property Collection|AvisosSaa[] $avisos_saas
  *
  * @package App\Models
@@ -68,10 +67,7 @@ class Cliente extends Model
 		return $this->hasMany(SucursalesCliente::class);
 	}
 
-	public function notificaciones()
-	{
-		return $this->hasMany(Notificacione::class);
-	}
+
 
 	public function avisos_saas()
 	{

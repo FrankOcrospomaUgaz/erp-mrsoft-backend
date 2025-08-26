@@ -25,7 +25,6 @@ public function index(Request $request)
         'contactos_clientes',
         'contratos',
         'sucursales_clientes',
-        'notificaciones',
         'avisos_saas'
     ])
     ->when($search, function ($query, $search) {
@@ -79,7 +78,6 @@ public function index(Request $request)
             'contactos_clientes',
             'contratos',
             'sucursales_clientes',
-            'notificaciones',
             'avisos_saas'
         ])->find($id);
 

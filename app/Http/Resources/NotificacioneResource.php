@@ -20,8 +20,8 @@ class NotificacioneResource extends JsonResource
             'detalle' => $this->detalle,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
+'contrato' => ContratoResource::make($this->whenLoaded('contrato')),
 
-            'cliente' => $this->whenLoaded('cliente'),
         ];
     }
 }

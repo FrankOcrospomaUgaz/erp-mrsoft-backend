@@ -38,8 +38,9 @@ class Notificacione extends Model
 		'detalle'
 	];
 
-	public function contrato()
-	{
-		return $this->belongsTo(Contrato::class);
-	}
+public function contrato()
+{
+    return $this->belongsTo(Contrato::class, 'contrato_id', 'id');
+}
+
 }

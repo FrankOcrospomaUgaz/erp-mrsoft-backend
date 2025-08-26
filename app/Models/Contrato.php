@@ -54,4 +54,9 @@ class Contrato extends Model
     {
         return $this->hasMany(\App\Models\ContratoProductoModulo::class, 'contrato_id');
     }
+
+    	public function notificaciones()
+	{
+		return $this->hasMany(Notificacione::class);
+	}
 }
