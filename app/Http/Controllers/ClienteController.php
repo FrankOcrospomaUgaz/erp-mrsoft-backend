@@ -153,7 +153,7 @@ public function index(Request $request)
                 }
             }
 
-            if ($request->tipo === 'corporacion' && $request->has('sucursales')) {
+            if ( $request->has('sucursales')) {
                 foreach ($request->sucursales as $sucursal) {
                     $cliente->sucursales_clientes()->create($sucursal);
                 }
@@ -247,16 +247,13 @@ public function index(Request $request)
             }
 
             // Eliminar y crear nuevas sucursales si es corporación
-            if ($request->tipo === 'corporacion') {
+           if ($request->has('sucursales')) {
                 $cliente->sucursales_clientes()->delete();
-                if ($request->has('sucursales')) {
+                
                     foreach ($request->sucursales as $sucursal) {
                         $cliente->sucursales_clientes()->create($sucursal);
                     }
-                }
-            } else {
-                // Si ya no es corporación, eliminar sucursales existentes
-                $cliente->sucursales_clientes()->delete();
+                
             }
 
             DB::commit();
