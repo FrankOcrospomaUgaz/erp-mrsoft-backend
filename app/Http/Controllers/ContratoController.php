@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\{Contrato, Cliente, ContratoProductoModulo, Cuota};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\DB;
 use App\Http\Resources\ContratoResource;
 
@@ -80,9 +81,44 @@ public function index(Request $request)
     /**
      * Registrar un nuevo contrato
      */
-   public function store(Request $request)
+
+
+
+public function store(Request $request)
 {
-    $validator = Validator::make($request->all(), Contrato::$rules);
+    $validator = Validator::make(
+        $request->all(),
+        [
+            'fecha_inicio' => 'required|date',
+            'fecha_fin'    => 'required|date|after:fecha_inicio',
+            'numero'       => [
+                'required',
+                'string',
+                Rule::unique('contratos', 'numero')
+            ],
+            'cliente_id'   => 'required|exists:clientes,id',
+            'tipo_contrato'=> 'required|string',
+            'total'        => 'required|numeric|min:0',
+            'forma_pago'   => 'required|string|in:unico,parcial',
+        ],
+        [
+            'fecha_inicio.required' => 'La fecha de inicio es obligatoria.',
+            'fecha_inicio.date'     => 'La fecha de inicio debe ser una fecha válida.',
+            'fecha_fin.required'    => 'La fecha de fin es obligatoria.',
+            'fecha_fin.date'        => 'La fecha de fin debe ser una fecha válida.',
+            'fecha_fin.after'       => 'La fecha de fin debe ser posterior a la fecha de inicio.',
+            'numero.required'       => 'El número de contrato es obligatorio.',
+            'numero.unique'         => 'El número de contrato ya está en uso.',
+            'cliente_id.required'   => 'Debe seleccionar un cliente.',
+            'cliente_id.exists'     => 'El cliente seleccionado no existe.',
+            'tipo_contrato.required'=> 'El tipo de contrato es obligatorio.',
+            'total.required'        => 'El total es obligatorio.',
+            'total.numeric'         => 'El total debe ser un valor numérico.',
+            'total.min'             => 'El total no puede ser negativo.',
+            'forma_pago.required'   => 'La forma de pago es obligatoria.',
+            'forma_pago.in'         => 'La forma de pago debe ser único o parcial.',
+        ]
+    );
 
     if ($validator->fails()) {
         return response()->json([
@@ -92,7 +128,6 @@ public function index(Request $request)
     }
 
     DB::beginTransaction();
-
     try {
         $contrato = Contrato::create($request->only([
             'fecha_inicio',
@@ -104,7 +139,6 @@ public function index(Request $request)
             'forma_pago'
         ]));
 
-        // Registrar productos y módulos contratados
         if ($request->filled('productos_modulos')) {
             foreach ($request->productos_modulos as $pm) {
                 ContratoProductoModulo::create([
@@ -116,14 +150,13 @@ public function index(Request $request)
             }
         }
 
-        // Registrar cuotas solo si forma_pago = parcial
         if ($contrato->forma_pago === 'parcial' && $request->filled('cuotas')) {
             foreach ($request->cuotas as $cuota) {
                 Cuota::create([
-                    'contrato_id'      => $contrato->id,
-                    'monto'            => $cuota['monto'],
-                    'fecha_vencimiento'=> $cuota['fecha_vencimiento'],
-                    'situacion'        => 'pendiente'
+                    'contrato_id'       => $contrato->id,
+                    'monto'             => $cuota['monto'],
+                    'fecha_vencimiento' => $cuota['fecha_vencimiento'],
+                    'situacion'         => 'pendiente'
                 ]);
             }
         }
@@ -131,21 +164,23 @@ public function index(Request $request)
         DB::commit();
 
         return response()->json([
-            'status' => 201,
+            'status'  => 201,
             'message' => 'Contrato creado exitosamente',
-            'data' => $contrato->load(['cliente', 'cuotas', 'contratoProductoModulos'])
+            'data'    => $contrato->load(['cliente', 'cuotas', 'contratoProductoModulos'])
         ], 201);
 
     } catch (\Exception $e) {
         DB::rollBack();
 
         return response()->json([
-            'status' => 500,
+            'status'  => 500,
             'message' => 'Error al registrar el contrato',
-            'error' => $e->getMessage()
+            'error'   => $e->getMessage()
         ], 500);
     }
 }
+
+
 
 
     /**
