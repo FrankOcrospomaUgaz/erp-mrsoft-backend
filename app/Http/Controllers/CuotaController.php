@@ -61,7 +61,7 @@ public function index(Request $request)
         $query->where('contrato_id', $request->get('contrato_id'));
     }
 
-    $cuotas = $query->paginate($request->get('per_page', 5));
+    $cuotas = $query->paginate($request->get('per_page', 10));
 
     return response()->json([
         'data' => CuotaResource::collection($cuotas->items()),
@@ -90,7 +90,7 @@ public function index(Request $request)
     {
         return response()->json([
             'status' => 200,
-            'data' => $cuota->load(['contrato', 'pagos_cuota'])
+            'data' => $cuota->load(['contrato', 'pagos_cuota', 'contrato.cliente'])
         ], 200);
     }
 

@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use App\Http\Resources\ClienteResource;
+
 class ClienteController extends Controller
 {
     /**
@@ -16,58 +17,75 @@ class ClienteController extends Controller
      */
 
 
-public function index(Request $request)
-{
-    $search = $request->get('search');
-    $perPage = $request->get('per_page', 5);
+    public function index(Request $request)
+    {
+        $search = $request->get('search');
+        $all    = filter_var($request->get('all', false), FILTER_VALIDATE_BOOLEAN);
+        $perPage = $all ? null : $request->get('per_page', 10); // default 10
 
-    $clientes = Cliente::with([
-        'contactos_clientes',
-        'contratos',
-        'sucursales_clientes',
-        'avisos_saas'
-    ])
-    ->when($search, function ($query, $search) {
-        $query->where(function ($q) use ($search) {
-            // Búsqueda en tabla clientes
-            $q->where('ruc', 'ILIKE', "%{$search}%")
-              ->orWhere('razon_social', 'ILIKE', "%{$search}%")
-              ->orWhere('dueno_nombre', 'ILIKE', "%{$search}%")
-              ->orWhere('dueno_celular', 'ILIKE', "%{$search}%")
-              ->orWhere('dueno_email', 'ILIKE', "%{$search}%")
-              ->orWhere('representante_nombre', 'ILIKE', "%{$search}%")
-              ->orWhere('representante_celular', 'ILIKE', "%{$search}%")
-              ->orWhere('representante_email', 'ILIKE', "%{$search}%");
-        });
+        $query = Cliente::with([
+            'contactos_clientes',
+            'contratos',
+            'sucursales_clientes',
+            'avisos_saas'
+        ])
+            ->when($search, function ($query, $search) {
+                $query->where(function ($q) use ($search) {
+                    // Búsqueda en tabla clientes
+                    $q->where('ruc', 'ILIKE', "%{$search}%")
+                        ->orWhere('razon_social', 'ILIKE', "%{$search}%")
+                        ->orWhere('dueno_nombre', 'ILIKE', "%{$search}%")
+                        ->orWhere('dueno_celular', 'ILIKE', "%{$search}%")
+                        ->orWhere('dueno_email', 'ILIKE', "%{$search}%")
+                        ->orWhere('representante_nombre', 'ILIKE', "%{$search}%")
+                        ->orWhere('representante_celular', 'ILIKE', "%{$search}%")
+                        ->orWhere('representante_email', 'ILIKE', "%{$search}%");
+                });
 
-        // Búsqueda en contactos relacionados
-        $query->orWhereHas('contactos_clientes', function ($q) use ($search) {
-            $q->where('nombre', 'ILIKE', "%{$search}%")
-              ->orWhere('celular', 'ILIKE', "%{$search}%")
-              ->orWhere('email', 'ILIKE', "%{$search}%");
-        });
-    })
-    ->paginate($perPage);
+                // Búsqueda en contactos relacionados
+                $query->orWhereHas('contactos_clientes', function ($q) use ($search) {
+                    $q->where('nombre', 'ILIKE', "%{$search}%")
+                        ->orWhere('celular', 'ILIKE', "%{$search}%")
+                        ->orWhere('email', 'ILIKE', "%{$search}%");
+                });
+            });
 
-    return response()->json([
-        'data' => ClienteResource::collection($clientes->items()),
-        'links' => [
-            'first' => $clientes->url(1),
-            'last' => $clientes->url($clientes->lastPage()),
-            'prev' => $clientes->previousPageUrl(),
-            'next' => $clientes->nextPageUrl(),
-        ],
-        'meta' => [
-            'current_page' => $clientes->currentPage(),
-            'from' => $clientes->firstItem(),
-            'last_page' => $clientes->lastPage(),
-            'path' => $clientes->path(),
-            'per_page' => $clientes->perPage(),
-            'to' => $clientes->lastItem(),
-            'total' => $clientes->total(),
-        ]
-    ]);
-}
+        if ($all) {
+            // Todos los registros sin paginación
+            $clientes = $query->get();
+
+            return response()->json([
+                'data' => ClienteResource::collection($clientes),
+                'links' => null,
+                'meta' => [
+                    'total' => $clientes->count()
+                ]
+            ]);
+        } else {
+            // Con paginación
+            $clientes = $query->paginate($perPage);
+
+            return response()->json([
+                'data' => ClienteResource::collection($clientes->items()),
+                'links' => [
+                    'first' => $clientes->url(1),
+                    'last' => $clientes->url($clientes->lastPage()),
+                    'prev' => $clientes->previousPageUrl(),
+                    'next' => $clientes->nextPageUrl(),
+                ],
+                'meta' => [
+                    'current_page' => $clientes->currentPage(),
+                    'from' => $clientes->firstItem(),
+                    'last_page' => $clientes->lastPage(),
+                    'path' => $clientes->path(),
+                    'per_page' => $clientes->perPage(),
+                    'to' => $clientes->lastItem(),
+                    'total' => $clientes->total(),
+                ]
+            ]);
+        }
+    }
+
 
     /**
      * Mostrar un cliente específico
@@ -153,7 +171,7 @@ public function index(Request $request)
                 }
             }
 
-            if ( $request->has('sucursales')) {
+            if ($request->has('sucursales')) {
                 foreach ($request->sucursales as $sucursal) {
                     $cliente->sucursales_clientes()->create($sucursal);
                 }
@@ -247,13 +265,12 @@ public function index(Request $request)
             }
 
             // Eliminar y crear nuevas sucursales si es corporación
-           if ($request->has('sucursales')) {
+            if ($request->has('sucursales')) {
                 $cliente->sucursales_clientes()->delete();
-                
-                    foreach ($request->sucursales as $sucursal) {
-                        $cliente->sucursales_clientes()->create($sucursal);
-                    }
-                
+
+                foreach ($request->sucursales as $sucursal) {
+                    $cliente->sucursales_clientes()->create($sucursal);
+                }
             }
 
             DB::commit();

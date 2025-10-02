@@ -8,58 +8,62 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Resources\PagosCuotumResource;
+use App\Models\Cuota;
 
 class PagoCuotumController extends Controller
 {
 
-public function index(Request $request)
-{
-    $query = PagosCuotum::with('cuota');
+    public function index(Request $request)
+    {
+        $query = PagosCuotum::with('cuota');
 
-    // 🔍 Búsqueda por comprobante
-    if ($request->filled('search')) {
-        $query->where('comprobante', 'ILIKE', "%{$request->search}%");
+        // 🔍 Búsqueda por comprobante
+        if ($request->filled('search')) {
+            $query->where('comprobante', 'ILIKE', "%{$request->search}%");
+        }
+
+        // 📅 Filtrar por fecha de pago
+        if ($request->filled('fecha_inicio') && $request->filled('fecha_fin')) {
+            $query->whereBetween('fecha_pago', [$request->fecha_inicio, $request->fecha_fin]);
+        } elseif ($request->filled('fecha_inicio')) {
+            $query->whereDate('fecha_pago', '>=', $request->fecha_inicio);
+        } elseif ($request->filled('fecha_fin')) {
+            $query->whereDate('fecha_pago', '<=', $request->fecha_fin);
+        }
+
+        // 💰 Filtrar por rango de montos
+        if ($request->filled('monto_min')) {
+            $query->where('monto_pagado', '>=', $request->monto_min);
+        }
+        if ($request->filled('monto_max')) {
+            $query->where('monto_pagado', '<=', $request->monto_max);
+        }
+        if ($request->filled('cuota_id')) {
+            $query->where('cuota_id', '<=', $request->cuota_id);
+        }
+
+        // 📑 Paginación
+        $pagos = $query->paginate($request->get('per_page', 5));
+
+        return response()->json([
+            'data' => PagosCuotumResource::collection($pagos->items()),
+            'links' => [
+                'first' => $pagos->url(1),
+                'last' => $pagos->url($pagos->lastPage()),
+                'prev' => $pagos->previousPageUrl(),
+                'next' => $pagos->nextPageUrl(),
+            ],
+            'meta' => [
+                'current_page' => $pagos->currentPage(),
+                'from' => $pagos->firstItem(),
+                'last_page' => $pagos->lastPage(),
+                'path' => $pagos->path(),
+                'per_page' => $pagos->perPage(),
+                'to' => $pagos->lastItem(),
+                'total' => $pagos->total(),
+            ]
+        ]);
     }
-
-    // 📅 Filtrar por fecha de pago
-    if ($request->filled('fecha_inicio') && $request->filled('fecha_fin')) {
-        $query->whereBetween('fecha_pago', [$request->fecha_inicio, $request->fecha_fin]);
-    } elseif ($request->filled('fecha_inicio')) {
-        $query->whereDate('fecha_pago', '>=', $request->fecha_inicio);
-    } elseif ($request->filled('fecha_fin')) {
-        $query->whereDate('fecha_pago', '<=', $request->fecha_fin);
-    }
-
-    // 💰 Filtrar por rango de montos
-    if ($request->filled('monto_min')) {
-        $query->where('monto_pagado', '>=', $request->monto_min);
-    }
-    if ($request->filled('monto_max')) {
-        $query->where('monto_pagado', '<=', $request->monto_max);
-    }
-
-    // 📑 Paginación
-    $pagos = $query->paginate($request->get('per_page', 5));
-
-    return response()->json([
-        'data' => PagosCuotumResource::collection($pagos->items()),
-        'links' => [
-            'first' => $pagos->url(1),
-            'last' => $pagos->url($pagos->lastPage()),
-            'prev' => $pagos->previousPageUrl(),
-            'next' => $pagos->nextPageUrl(),
-        ],
-        'meta' => [
-            'current_page' => $pagos->currentPage(),
-            'from' => $pagos->firstItem(),
-            'last_page' => $pagos->lastPage(),
-            'path' => $pagos->path(),
-            'per_page' => $pagos->perPage(),
-            'to' => $pagos->lastItem(),
-            'total' => $pagos->total(),
-        ]
-    ]);
-}
 
     public function store(Request $request)
     {
@@ -68,7 +72,9 @@ public function index(Request $request)
             'fecha_pago.required' => 'La fecha de pago es obligatoria.',
             'monto_pagado.required' => 'El monto pagado es obligatorio.',
             'monto_pagado.numeric' => 'El monto pagado debe ser numérico.',
-            'comprobante.file' => 'El comprobante debe ser un archivo válido (imagen o PDF).',
+            'comprobante.file' => 'El comprobante debe ser un archivo válido.',
+            'comprobante.mimes' => 'El comprobante debe ser una imagen (JPG, JPEG, PNG) o un archivo PDF.',
+            'comprobante.max' => 'El comprobante no debe exceder los 5MB.',
         ];
 
         $validator = Validator::make($request->all(), [
@@ -89,16 +95,64 @@ public function index(Request $request)
 
         try {
             $rutaComprobante = null;
+            $urlComprobante = null;
 
             if ($request->hasFile('comprobante')) {
-                $rutaComprobante = $request->file('comprobante')->store('comprobantes', 'public');
+                $archivo = $request->file('comprobante');
+
+                // Verificar que el archivo sea válido
+                if (!$archivo->isValid()) {
+                    throw new \Exception('El archivo subido no es válido.');
+                }
+
+                // Obtener información del archivo
+                $extension = $archivo->getClientOriginalExtension();
+                $nombreOriginal = pathinfo($archivo->getClientOriginalName(), PATHINFO_FILENAME);
+
+                // Limpiar el nombre del archivo
+                $nombreLimpio = preg_replace('/[^A-Za-z0-9\-_]/', '_', $nombreOriginal);
+
+                // Generar nombre único
+                $nombreUnico = $nombreLimpio . '_' . time() . '_' . uniqid() . '.' . strtolower($extension);
+
+                // Crear estructura de directorios organizados por año/mes
+                $año = date('Y');
+                $mes = date('m');
+                $directorioDestino = "comprobantes";
+
+                try {
+                    // Guardar el archivo en storage/app/public/comprobantes/año/mes/
+                    $rutaComprobante = $archivo->storeAs($directorioDestino, $nombreUnico, 'public');
+
+                    // Verificar que el archivo se guardó correctamente
+                    if (!Storage::disk('public')->exists($rutaComprobante)) {
+                        throw new \Exception('Error al guardar el archivo en el servidor.');
+                    }
+
+                    // Generar URL accesible para el archivo
+                    $urlComprobante = Storage::url($rutaComprobante);
+                } catch (\Exception $e) {
+                    // Limpiar archivo si hubo error
+                    if ($rutaComprobante && Storage::disk('public')->exists($rutaComprobante)) {
+                        Storage::disk('public')->delete($rutaComprobante);
+                    }
+                    throw new \Exception('Error al procesar el archivo: ' . $e->getMessage());
+                }
             }
 
+            // Crear el registro de pago
             $pago = PagosCuotum::create([
                 'cuota_id' => $request->cuota_id,
                 'fecha_pago' => $request->fecha_pago,
                 'monto_pagado' => $request->monto_pagado,
-                'comprobante' => $rutaComprobante,
+                'comprobante' => $rutaComprobante, // Guardar la ruta relativa en la BD
+            ]);
+
+            // Actualizar la cuota asociada
+            $cuota = Cuota::findOrFail($request->cuota_id);
+            $cuota->update([
+                'situacion' => 'pagado',
+                'fecha_pago' => $request->fecha_pago,
             ]);
 
             DB::commit();
@@ -106,10 +160,20 @@ public function index(Request $request)
             return response()->json([
                 'status' => 201,
                 'message' => 'Pago registrado exitosamente.',
-                'data' => $pago->load('cuota')
+                'data' => $pago->load('cuota'),
+                'comprobante' => [
+                    'ruta' => $rutaComprobante,
+                    'url' => $urlComprobante,
+                    'url_completa' => $urlComprobante ? url($urlComprobante) : null
+                ]
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
+
+            // Limpiar archivo si hubo error en la transacción
+            if (isset($rutaComprobante) && $rutaComprobante && Storage::disk('public')->exists($rutaComprobante)) {
+                Storage::disk('public')->delete($rutaComprobante);
+            }
 
             return response()->json([
                 'status' => 500,
@@ -119,6 +183,48 @@ public function index(Request $request)
         }
     }
 
+    /**
+     * Método auxiliar para obtener la URL completa del comprobante
+     */
+    public function obtenerUrlComprobante($rutaComprobante)
+    {
+        if (!$rutaComprobante) {
+            return null;
+        }
+
+        // Verificar si el archivo existe
+        if (!Storage::disk('public')->exists($rutaComprobante)) {
+            return null;
+        }
+
+        return Storage::url($rutaComprobante);
+    }
+
+    /**
+     * Método para mostrar el comprobante directamente
+     */
+    public function mostrarComprobante($id)
+    {
+        $pago = PagosCuotum::find($id);
+
+        if (!$pago || !$pago->comprobante) {
+            return response()->json([
+                'status' => 404,
+                'message' => 'Comprobante no encontrado.'
+            ], 404);
+        }
+
+        $rutaArchivo = storage_path('app/public/' . $pago->comprobante);
+
+        if (!file_exists($rutaArchivo)) {
+            return response()->json([
+                'status' => 404,
+                'message' => 'Archivo no encontrado en el servidor.'
+            ], 404);
+        }
+
+        return response()->file($rutaArchivo);
+    }
     public function show($id)
     {
         $pago = PagosCuotum::with('cuota')->find($id);
