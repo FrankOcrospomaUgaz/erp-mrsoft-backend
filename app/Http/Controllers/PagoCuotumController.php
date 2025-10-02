@@ -72,9 +72,7 @@ class PagoCuotumController extends Controller
             'fecha_pago.required' => 'La fecha de pago es obligatoria.',
             'monto_pagado.required' => 'El monto pagado es obligatorio.',
             'monto_pagado.numeric' => 'El monto pagado debe ser numérico.',
-            'comprobante.file' => 'El comprobante debe ser un archivo válido.',
-            'comprobante.mimes' => 'El comprobante debe ser una imagen (JPG, JPEG, PNG) o un archivo PDF.',
-            'comprobante.max' => 'El comprobante no debe exceder los 5MB.',
+            'comprobante.file' => 'El comprobante debe ser un archivo válido (imagen o PDF).',
         ];
 
         $validator = Validator::make($request->all(), [
@@ -95,59 +93,18 @@ class PagoCuotumController extends Controller
 
         try {
             $rutaComprobante = null;
-            $urlComprobante = null;
 
             if ($request->hasFile('comprobante')) {
-                $archivo = $request->file('comprobante');
-
-                // Verificar que el archivo sea válido
-                if (!$archivo->isValid()) {
-                    throw new \Exception('El archivo subido no es válido.');
-                }
-
-                // Obtener información del archivo
-                $extension = $archivo->getClientOriginalExtension();
-                $nombreOriginal = pathinfo($archivo->getClientOriginalName(), PATHINFO_FILENAME);
-
-                // Limpiar el nombre del archivo
-                $nombreLimpio = preg_replace('/[^A-Za-z0-9\-_]/', '_', $nombreOriginal);
-
-                // Generar nombre único
-                $nombreUnico = $nombreLimpio . '_' . time() . '_' . uniqid() . '.' . strtolower($extension);
-
-                // Crear estructura de directorios organizados por año/mes
-                $año = date('Y');
-                $mes = date('m');
-                $directorioDestino = "comprobantes";
-
-                try {
-                    // Guardar el archivo en storage/app/public/comprobantes/año/mes/
-                    $rutaComprobante = $archivo->storeAs($directorioDestino, $nombreUnico, 'public');
-
-                    // Verificar que el archivo se guardó correctamente
-                    if (!Storage::disk('public')->exists($rutaComprobante)) {
-                        throw new \Exception('Error al guardar el archivo en el servidor.');
-                    }
-
-                    // Generar URL accesible para el archivo
-                    $urlComprobante = Storage::url($rutaComprobante);
-                } catch (\Exception $e) {
-                    // Limpiar archivo si hubo error
-                    if ($rutaComprobante && Storage::disk('public')->exists($rutaComprobante)) {
-                        Storage::disk('public')->delete($rutaComprobante);
-                    }
-                    throw new \Exception('Error al procesar el archivo: ' . $e->getMessage());
-                }
+                $rutaComprobante = $request->file('comprobante')->store('comprobantes', 'public');
             }
 
-            // Crear el registro de pago
             $pago = PagosCuotum::create([
                 'cuota_id' => $request->cuota_id,
                 'fecha_pago' => $request->fecha_pago,
                 'monto_pagado' => $request->monto_pagado,
-                'comprobante' => $rutaComprobante, // Guardar la ruta relativa en la BD
+                'comprobante' => $rutaComprobante,
             ]);
-
+            
             // Actualizar la cuota asociada
             $cuota = Cuota::findOrFail($request->cuota_id);
             $cuota->update([
@@ -160,20 +117,10 @@ class PagoCuotumController extends Controller
             return response()->json([
                 'status' => 201,
                 'message' => 'Pago registrado exitosamente.',
-                'data' => $pago->load('cuota'),
-                'comprobante' => [
-                    'ruta' => $rutaComprobante,
-                    'url' => $urlComprobante,
-                    'url_completa' => $urlComprobante ? url($urlComprobante) : null
-                ]
+                'data' => $pago->load('cuota')
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
-
-            // Limpiar archivo si hubo error en la transacción
-            if (isset($rutaComprobante) && $rutaComprobante && Storage::disk('public')->exists($rutaComprobante)) {
-                Storage::disk('public')->delete($rutaComprobante);
-            }
 
             return response()->json([
                 'status' => 500,
