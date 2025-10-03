@@ -68,7 +68,12 @@ class ContratoController extends Controller
      */
     public function show($id)
     {
-        $contrato = Contrato::with(['cliente', 'cuotas', 'contratoProductoModulos'])->find($id);
+        $contrato = Contrato::with([
+            'cliente',
+            'cuotas',
+            'contratoProductoModulos.modulo',
+            'contratoProductoModulos.producto',
+        ])->find($id);
 
         if (!$contrato) {
             return response()->json([
