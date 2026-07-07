@@ -65,70 +65,104 @@ class PagoCuotumController extends Controller
         ]);
     }
 
-    public function store(Request $request)
-    {
-        $messages = [
-            'cuota_id.required' => 'El campo cuota es obligatorio.',
-            'fecha_pago.required' => 'La fecha de pago es obligatoria.',
-            'monto_pagado.required' => 'El monto pagado es obligatorio.',
-            'monto_pagado.numeric' => 'El monto pagado debe ser numérico.',
-            'comprobante.file' => 'El comprobante debe ser un archivo válido (imagen o PDF).',
-        ];
+public function store(Request $request)
+{
+    $messages = [
+        'cuota_id.required' => 'El campo cuota es obligatorio.',
+        'fecha_pago.required' => 'La fecha de pago es obligatoria.',
+        'monto_pagado.required' => 'El monto pagado es obligatorio.',
+        'monto_pagado.numeric' => 'El monto pagado debe ser numérico.',
+        'monto_pagado.min' => 'El monto pagado debe ser mayor a 0.',
+        'comprobante.file' => 'El comprobante debe ser un archivo válido (imagen o PDF).',
+    ];
 
-        $validator = Validator::make($request->all(), [
-            'cuota_id' => 'required|exists:cuotas,id',
-            'fecha_pago' => 'required|date',
-            'monto_pagado' => 'required|numeric|min:0',
-            'comprobante' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120', // máx 5MB
-        ], $messages);
+    $validator = Validator::make($request->all(), [
+        'cuota_id' => 'required|exists:cuotas,id',
+        'fecha_pago' => 'required|date',
+        'monto_pagado' => 'required|numeric|min:0.01',
+        'comprobante' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120',
+    ], $messages);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'status' => 422,
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
-        DB::beginTransaction();
-
-        try {
-            $rutaComprobante = null;
-
-            if ($request->hasFile('comprobante')) {
-                $rutaComprobante = $request->file('comprobante')->store('comprobantes', 'public');
-            }
-
-            $pago = PagosCuotum::create([
-                'cuota_id' => $request->cuota_id,
-                'fecha_pago' => $request->fecha_pago,
-                'monto_pagado' => $request->monto_pagado,
-                'comprobante' => $rutaComprobante,
-            ]);
-            
-            // Actualizar la cuota asociada
-            $cuota = Cuota::findOrFail($request->cuota_id);
-            $cuota->update([
-                'situacion' => 'pagado',
-                'fecha_pago' => $request->fecha_pago,
-            ]);
-
-            DB::commit();
-
-            return response()->json([
-                'status' => 201,
-                'message' => 'Pago registrado exitosamente.',
-                'data' => $pago->load('cuota')
-            ], 201);
-        } catch (\Exception $e) {
-            DB::rollBack();
-
-            return response()->json([
-                'status' => 500,
-                'message' => 'Error al registrar el pago.',
-                'error' => $e->getMessage()
-            ], 500);
-        }
+    if ($validator->fails()) {
+        return response()->json([
+            'status' => 422,
+            'errors' => $validator->errors()
+        ], 422);
     }
+
+    DB::beginTransaction();
+
+    try {
+        // Traer cuota y validar su estado
+        $cuota = Cuota::findOrFail($request->cuota_id);
+
+        if ($cuota->situacion === 'pagado') {
+            return response()->json([
+                'status' => 400,
+                'message' => 'Esta cuota ya fue pagada completamente.'
+            ], 400);
+        }
+
+        // Calcular suma de pagos previos
+        $totalPagosPrevios = PagosCuotum::where('cuota_id', $cuota->id)->sum('monto_pagado');
+        $nuevoTotal = $totalPagosPrevios + $request->monto_pagado;
+
+        // Validar que no se exceda del monto de la cuota
+        if ($nuevoTotal > $cuota->monto) {
+            return response()->json([
+                'status' => 400,
+                'message' => 'El monto total pagado (' . number_format($nuevoTotal, 2) . ') no puede superar el monto de la cuota (' . number_format($cuota->monto, 2) . ').'
+            ], 400);
+        }
+
+        // Guardar comprobante si se envía
+        $rutaComprobante = null;
+        if ($request->hasFile('comprobante')) {
+            $rutaComprobante = $request->file('comprobante')->store('comprobantes', 'public');
+        }
+
+        // Registrar el pago
+        $pago = PagosCuotum::create([
+            'cuota_id'     => $cuota->id,
+            'fecha_pago'   => $request->fecha_pago,
+            'monto_pagado' => $request->monto_pagado,
+            'comprobante'  => $rutaComprobante,
+        ]);
+
+        // Determinar si se completó la cuota
+        if (round($nuevoTotal, 2) == round($cuota->monto, 2)) {
+            $cuota->update([
+                'situacion'  => 'pagado',
+                'fecha_pago' => $request->fecha_pago,
+            ]);
+        } else {
+            // Si aún falta pagar, mantener la situación (ej. "pendiente")
+            $cuota->update([
+                'situacion'  => 'pendiente',
+            ]);
+        }
+
+        DB::commit();
+
+        return response()->json([
+            'status'  => 201,
+            'message' => 'Pago registrado exitosamente.',
+            'data'    => [
+                'pago' => $pago->load('cuota'),
+                'total_pagado' => $nuevoTotal,
+                'restante' => round($cuota->monto - $nuevoTotal, 2),
+                'situacion_cuota' => $cuota->situacion
+            ]
+        ], 201);
+    } catch (\Exception $e) {
+        DB::rollBack();
+        return response()->json([
+            'status'  => 500,
+            'message' => 'Error al registrar el pago.',
+            'error'   => $e->getMessage()
+        ], 500);
+    }
+}
 
     /**
      * Método auxiliar para obtener la URL completa del comprobante

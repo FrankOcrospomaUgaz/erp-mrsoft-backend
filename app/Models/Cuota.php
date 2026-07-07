@@ -19,7 +19,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * @property float $monto
  * @property Carbon $fecha_vencimiento
  * @property Carbon|null $fecha_pago
- * @property string $situacion
+ * @property string $situacion   <--- 🔹 Agregar esta línea
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property string|null $deleted_at
