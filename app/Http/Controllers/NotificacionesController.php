@@ -23,13 +23,17 @@ class NotificacionesController extends Controller
                     $q->where('detalle', 'ILIKE', "%{$search}%")
                         ->orWhereHas('contrato.cliente', function ($q2) use ($search) {
                             $q2->where('razon_social', 'ILIKE', "%{$search}%")
+                                ->orWhere('nombre_comercial', 'ILIKE', "%{$search}%")
                                 ->orWhere('ruc', 'ILIKE', "%{$search}%")
                                 ->orWhere('dueno_nombre', 'ILIKE', "%{$search}%")
                                 ->orWhere('dueno_celular', 'ILIKE', "%{$search}%")
                                 ->orWhere('dueno_email', 'ILIKE', "%{$search}%")
                                 ->orWhere('representante_nombre', 'ILIKE', "%{$search}%")
                                 ->orWhere('representante_celular', 'ILIKE', "%{$search}%")
-                                ->orWhere('representante_email', 'ILIKE', "%{$search}%");
+                                ->orWhere('representante_email', 'ILIKE', "%{$search}%")
+                                ->orWhere('responsable_nombre', 'ILIKE', "%{$search}%")
+                                ->orWhere('responsable_celular', 'ILIKE', "%{$search}%")
+                                ->orWhere('responsable_email', 'ILIKE', "%{$search}%");
                         });
                 });
             })

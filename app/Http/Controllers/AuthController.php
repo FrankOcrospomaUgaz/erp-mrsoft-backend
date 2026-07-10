@@ -48,6 +48,7 @@ class AuthController extends Controller
         // Armar detalle de las cuotas vencidas
         $detalle = $cuotasPendientes->map(function ($c) {
             $cliente = $c->contrato->cliente;
+            $nombreCliente = $cliente->razon_social ?? $cliente->nombre_comercial ?? 'Cliente sin nombre';
             return [
                 'cuota_id'          => $c->id,
                 'monto'             => $c->monto,
@@ -61,14 +62,19 @@ class AuthController extends Controller
                 'cliente' => [
                     'id'                    => $cliente->id,
                     'razon_social'          => $cliente->razon_social,
+                    'nombre_comercial'      => $cliente->nombre_comercial,
+                    'nombre_cliente'        => $nombreCliente,
                     'dueno_nombre'          => $cliente->dueno_nombre,
                     'dueno_celular'         => $cliente->dueno_celular,
                     'dueno_email'           => $cliente->dueno_email,
                     'representante_nombre'  => $cliente->representante_nombre,
                     'representante_celular' => $cliente->representante_celular,
                     'representante_email'   => $cliente->representante_email,
+                    'responsable_nombre'    => $cliente->responsable_nombre,
+                    'responsable_celular'   => $cliente->responsable_celular,
+                    'responsable_email'     => $cliente->responsable_email,
                 ],
-                'mensaje' => "⚠️ La cuota {$c->id} del contrato {$c->contrato->numero} está vencida. Contactar urgentemente al cliente {$cliente->razon_social} (Dueño: {$cliente->dueno_nombre}, Email: {$cliente->dueno_email}, Cel: {$cliente->dueno_celular}) para gestionar el pago.",
+                'mensaje' => "⚠️ La cuota {$c->id} del contrato {$c->contrato->numero} está vencida. Contactar urgentemente al cliente {$nombreCliente} (Dueño: {$cliente->dueno_nombre}, Email: {$cliente->dueno_email}, Cel: {$cliente->dueno_celular}) para gestionar el pago.",
             ];
         });
 

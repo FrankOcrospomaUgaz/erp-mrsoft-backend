@@ -31,4 +31,12 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    'ruc_lookup' => [
+        'url' => env('RUC_LOOKUP_URL'),
+        'token' => env('RUC_LOOKUP_TOKEN'),
+        'token_header' => env('RUC_LOOKUP_TOKEN_HEADER', 'Authorization'),
+        'token_prefix' => env('RUC_LOOKUP_TOKEN_PREFIX', 'Bearer'),
+        'timeout' => env('RUC_LOOKUP_TIMEOUT', 10),
+    ],
+
 ];

@@ -17,6 +17,7 @@ class ProductoResource extends JsonResource
         return [
             'id' => $this->id,
             'nombre' => $this->nombre,
+            'tipo' => $this->tipo ?? 'servicio',
             'descripcion' => $this->descripcion,
             'modulos' => $this->modulos, // Si necesitas más detalle, puedes usar ModuloResource
             'avisos_saas' => $this->avisos_saas, // Igual, puedes mapear o usar recurso

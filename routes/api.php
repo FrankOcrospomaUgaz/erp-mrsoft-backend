@@ -25,6 +25,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('notificaciones', App\Http\Controllers\NotificacionesController::class);
     Route::apiResource('productos', App\Http\Controllers\ProductoController::class);
     Route::apiResource('producto-modulos', App\Http\Controllers\ProductoModuloController::class);
+    Route::post('comprobantes/emision-masiva', [App\Http\Controllers\ComprobanteController::class, 'emisionMasiva']);
+    Route::post('comprobantes/reenviar-pendientes', [App\Http\Controllers\ComprobanteController::class, 'reenviarPendientes']);
+    Route::post('comprobantes/{id}/emitir', [App\Http\Controllers\ComprobanteController::class, 'emitir']);
+    Route::get('comprobantes/{id}/download-xml', [App\Http\Controllers\ComprobanteController::class, 'downloadXml']);
+    Route::get('comprobantes/{id}/download-cdr', [App\Http\Controllers\ComprobanteController::class, 'downloadCdr']);
+    Route::apiResource('comprobantes', App\Http\Controllers\ComprobanteController::class)->only(['index', 'store', 'show']);
+    Route::apiResource('facturadores', App\Http\Controllers\FacturadorController::class);
+    Route::get('clientes/consulta-ruc/{ruc}', [App\Http\Controllers\ClienteController::class, 'consultarRuc']);
+    Route::get('clientes/consulta-dni/{dni}', [App\Http\Controllers\ClienteController::class, 'consultarDni']);
     Route::apiResource('clientes', App\Http\Controllers\ClienteController::class);
     Route::get('clientes/{id}/sucursales', [App\Http\Controllers\ClienteController::class, 'sucursalesPorCliente']);
     Route::apiResource('pagos', App\Http\Controllers\PagoCuotumController::class);

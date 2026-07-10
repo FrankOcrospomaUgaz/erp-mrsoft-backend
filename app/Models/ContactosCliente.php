@@ -15,9 +15,10 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * 
  * @property int $id
  * @property int $cliente_id
+ * @property string|null $dni
  * @property string $nombre
- * @property string $celular
- * @property string $email
+ * @property string|null $celular
+ * @property string|null $email
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property string|null $deleted_at
@@ -37,6 +38,7 @@ class ContactosCliente extends Model
 
 	protected $fillable = [
 		'cliente_id',
+		'dni',
 		'nombre',
 		'celular',
 		'email'

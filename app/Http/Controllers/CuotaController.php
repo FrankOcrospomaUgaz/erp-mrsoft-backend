@@ -29,6 +29,7 @@ class CuotaController extends Controller
                             ->orWhere('tipo_contrato', 'ILIKE', "%{$search}%")
                             ->orWhereHas('cliente', function ($q3) use ($search) {
                                 $q3->where('razon_social', 'ILIKE', "%{$search}%")
+                                    ->orWhere('nombre_comercial', 'ILIKE', "%{$search}%")
                                     ->orWhere('ruc', 'ILIKE', "%{$search}%");
                             });
                     });

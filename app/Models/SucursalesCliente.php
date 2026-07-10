@@ -35,7 +35,10 @@ class SucursalesCliente extends Model
 
 	protected $fillable = [
 		'cliente_id',
-		'nombre'
+		'nombre',
+		'ruc',
+		'razon_social',
+		'nombre_comercial'
 	];
 
 	public function cliente()

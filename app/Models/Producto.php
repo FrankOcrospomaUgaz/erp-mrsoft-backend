@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * 
  * @property int $id
  * @property string $nombre
+ * @property string|null $tipo
  * @property string|null $descripcion
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
@@ -34,6 +35,7 @@ class Producto extends Model
 
 	protected $fillable = [
 		'nombre',
+		'tipo',
 		'descripcion'
 	];
 

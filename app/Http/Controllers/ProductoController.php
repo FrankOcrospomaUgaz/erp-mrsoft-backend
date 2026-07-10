@@ -2,79 +2,80 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Resources\ProductoResource;
 use App\Models\Producto;
-use App\Models\Modulo;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
-use App\Http\Resources\ProductoResource;
 
 class ProductoController extends Controller
 {
+    private function normalizeTipo(?string $tipo): string
+    {
+        return in_array($tipo, ['servicio', 'producto'], true) ? $tipo : 'servicio';
+    }
+
     /**
      * Listar todos los productos
      */
-public function index(Request $request)
-{
-    $search = $request->get('search');
-    $perPage = $request->get('per_page', 5);
+    public function index(Request $request)
+    {
+        $search = $request->get('search');
+        $perPage = $request->get('per_page', 5);
 
-    $productos = Producto::with([
-        'modulos.contratos',
-        'contratos',
-        'avisos_saas'
-    ])
-    ->when($search, function ($query, $search) {
-        $query->where(function ($q) use ($search) {
-            // Búsqueda en productos
-            $q->where('nombre', 'ILIKE', "%{$search}%")
-              ->orWhere('descripcion', 'ILIKE', "%{$search}%");
-        });
+        $productos = Producto::with([
+            'modulos.contratos',
+            'contratos',
+            'avisos_saas',
+        ])
+            ->when($search, function ($query, $search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('nombre', 'ILIKE', "%{$search}%")
+                        ->orWhere('tipo', 'ILIKE', "%{$search}%")
+                        ->orWhere('descripcion', 'ILIKE', "%{$search}%");
+                });
 
-        // Búsqueda en módulos relacionados
-        $query->orWhereHas('modulos', function ($q) use ($search) {
-            $q->where('nombre', 'ILIKE', "%{$search}%")
-              ->orWhere('precio_unitario', 'ILIKE', "%{$search}%");
-        });
+                $query->orWhereHas('modulos', function ($q) use ($search) {
+                    $q->where('nombre', 'ILIKE', "%{$search}%")
+                        ->orWhere('precio_unitario', 'ILIKE', "%{$search}%");
+                });
 
-        // Búsqueda en contratos relacionados al producto
-        $query->orWhereHas('contratos', function ($q) use ($search) {
-            $q->where('numero', 'ILIKE', "%{$search}%")
-              ->orWhere('tipo_contrato', 'ILIKE', "%{$search}%")
-              ->orWhere('forma_pago', 'ILIKE', "%{$search}%")
-              ->orWhere('total', 'ILIKE', "%{$search}%");
-        });
+                $query->orWhereHas('contratos', function ($q) use ($search) {
+                    $q->where('numero', 'ILIKE', "%{$search}%")
+                        ->orWhere('tipo_contrato', 'ILIKE', "%{$search}%")
+                        ->orWhere('forma_pago', 'ILIKE', "%{$search}%")
+                        ->orWhere('total', 'ILIKE', "%{$search}%");
+                });
 
-        // Búsqueda en contratos relacionados a los módulos del producto
-        $query->orWhereHas('modulos.contratos', function ($q) use ($search) {
-            $q->where('numero', 'ILIKE', "%{$search}%")
-              ->orWhere('tipo_contrato', 'ILIKE', "%{$search}%")
-              ->orWhere('forma_pago', 'ILIKE', "%{$search}%")
-              ->orWhere('total', 'ILIKE', "%{$search}%");
-        });
-    })
-    ->latest()
-    ->paginate($perPage);
+                $query->orWhereHas('modulos.contratos', function ($q) use ($search) {
+                    $q->where('numero', 'ILIKE', "%{$search}%")
+                        ->orWhere('tipo_contrato', 'ILIKE', "%{$search}%")
+                        ->orWhere('forma_pago', 'ILIKE', "%{$search}%")
+                        ->orWhere('total', 'ILIKE', "%{$search}%");
+                });
+            })
+            ->latest()
+            ->paginate($perPage);
 
-    return response()->json([
-        'data' => ProductoResource::collection($productos->items()),
-        'links' => [
-            'first' => $productos->url(1),
-            'last' => $productos->url($productos->lastPage()),
-            'prev' => $productos->previousPageUrl(),
-            'next' => $productos->nextPageUrl(),
-        ],
-        'meta' => [
-            'current_page' => $productos->currentPage(),
-            'from' => $productos->firstItem(),
-            'last_page' => $productos->lastPage(),
-            'path' => $productos->path(),
-            'per_page' => $productos->perPage(),
-            'to' => $productos->lastItem(),
-            'total' => $productos->total(),
-        ]
-    ]);
-}
+        return response()->json([
+            'data' => ProductoResource::collection($productos->items()),
+            'links' => [
+                'first' => $productos->url(1),
+                'last' => $productos->url($productos->lastPage()),
+                'prev' => $productos->previousPageUrl(),
+                'next' => $productos->nextPageUrl(),
+            ],
+            'meta' => [
+                'current_page' => $productos->currentPage(),
+                'from' => $productos->firstItem(),
+                'last_page' => $productos->lastPage(),
+                'path' => $productos->path(),
+                'per_page' => $productos->perPage(),
+                'to' => $productos->lastItem(),
+                'total' => $productos->total(),
+            ],
+        ]);
+    }
 
     /**
      * Mostrar un producto específico
@@ -86,13 +87,13 @@ public function index(Request $request)
         if (!$producto) {
             return response()->json([
                 'status' => 404,
-                'message' => 'Producto no encontrado'
+                'message' => 'Producto no encontrado',
             ], 404);
         }
 
         return response()->json([
             'status' => 200,
-            'data' => $producto
+            'data' => $producto,
         ], 200);
     }
 
@@ -102,14 +103,16 @@ public function index(Request $request)
     public function store(Request $request)
     {
         $messages = [
-            'nombre.required' => 'El nombre del producto es obligatorio.',
-            'modulos.*.nombre.required' => 'El nombre del módulo es obligatorio.',
-            'modulos.*.precio_unitario.required' => 'El precio unitario del módulo es obligatorio.',
-            'modulos.*.precio_unitario.numeric' => 'El precio unitario debe ser numérico.'
+            'nombre.required' => 'El nombre es obligatorio.',
+            'tipo.required' => 'El tipo es obligatorio.',
+            'modulos.*.nombre.required' => 'El nombre del concepto es obligatorio.',
+            'modulos.*.precio_unitario.required' => 'El precio unitario del concepto es obligatorio.',
+            'modulos.*.precio_unitario.numeric' => 'El precio unitario debe ser numérico.',
         ];
 
         $validator = Validator::make($request->all(), [
             'nombre' => 'required|string|max:255',
+            'tipo' => 'required|in:servicio,producto',
             'descripcion' => 'nullable|string',
             'modulos' => 'nullable|array',
             'modulos.*.nombre' => 'required|string|max:255',
@@ -119,14 +122,18 @@ public function index(Request $request)
         if ($validator->fails()) {
             return response()->json([
                 'status' => 422,
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
         DB::beginTransaction();
 
         try {
-            $producto = Producto::create($request->only(['nombre', 'descripcion']));
+            $producto = Producto::create([
+                'nombre' => $request->input('nombre'),
+                'tipo' => $this->normalizeTipo($request->input('tipo')),
+                'descripcion' => $request->input('descripcion'),
+            ]);
 
             if ($request->filled('modulos')) {
                 foreach ($request->modulos as $modulo) {
@@ -139,16 +146,15 @@ public function index(Request $request)
             return response()->json([
                 'status' => 201,
                 'message' => 'Producto creado exitosamente',
-                'data' => $producto->load('modulos')
+                'data' => $producto->load('modulos'),
             ], 201);
-
         } catch (\Exception $e) {
             DB::rollBack();
 
             return response()->json([
                 'status' => 500,
                 'message' => 'Error al crear el producto',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -163,19 +169,21 @@ public function index(Request $request)
         if (!$producto) {
             return response()->json([
                 'status' => 404,
-                'message' => 'Producto no encontrado'
+                'message' => 'Producto no encontrado',
             ], 404);
         }
 
         $messages = [
-            'nombre.required' => 'El nombre del producto es obligatorio.',
-            'modulos.*.nombre.required' => 'El nombre del módulo es obligatorio.',
-            'modulos.*.precio_unitario.required' => 'El precio unitario del módulo es obligatorio.',
-            'modulos.*.precio_unitario.numeric' => 'El precio unitario debe ser numérico.'
+            'nombre.required' => 'El nombre es obligatorio.',
+            'tipo.required' => 'El tipo es obligatorio.',
+            'modulos.*.nombre.required' => 'El nombre del concepto es obligatorio.',
+            'modulos.*.precio_unitario.required' => 'El precio unitario del concepto es obligatorio.',
+            'modulos.*.precio_unitario.numeric' => 'El precio unitario debe ser numérico.',
         ];
 
         $validator = Validator::make($request->all(), [
             'nombre' => 'required|string|max:255',
+            'tipo' => 'required|in:servicio,producto',
             'descripcion' => 'nullable|string',
             'modulos' => 'nullable|array',
             'modulos.*.nombre' => 'required|string|max:255',
@@ -185,14 +193,18 @@ public function index(Request $request)
         if ($validator->fails()) {
             return response()->json([
                 'status' => 422,
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
         DB::beginTransaction();
 
         try {
-            $producto->update($request->only(['nombre', 'descripcion']));
+            $producto->update([
+                'nombre' => $request->input('nombre'),
+                'tipo' => $this->normalizeTipo($request->input('tipo')),
+                'descripcion' => $request->input('descripcion'),
+            ]);
 
             if ($request->has('modulos')) {
                 $producto->modulos()->delete();
@@ -206,16 +218,15 @@ public function index(Request $request)
             return response()->json([
                 'status' => 200,
                 'message' => 'Producto actualizado correctamente',
-                'data' => $producto->load('modulos')
+                'data' => $producto->load('modulos'),
             ], 200);
-
         } catch (\Exception $e) {
             DB::rollBack();
 
             return response()->json([
                 'status' => 500,
                 'message' => 'Error al actualizar el producto',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -230,7 +241,7 @@ public function index(Request $request)
         if (!$producto) {
             return response()->json([
                 'status' => 404,
-                'message' => 'Producto no encontrado'
+                'message' => 'Producto no encontrado',
             ], 404);
         }
 
@@ -238,7 +249,7 @@ public function index(Request $request)
 
         return response()->json([
             'status' => 200,
-            'message' => 'Producto eliminado correctamente'
+            'message' => 'Producto eliminado correctamente',
         ], 200);
     }
 }

@@ -33,9 +33,11 @@ class ContratoController extends Controller
                     ->orWhere('tipo_contrato', 'ILIKE', "%{$search}%")
                     ->orWhereHas('cliente', function ($q2) use ($search) {
                         $q2->where('razon_social', 'ILIKE', "%{$search}%")
+                            ->orWhere('nombre_comercial', 'ILIKE', "%{$search}%")
                             ->orWhere('ruc', 'ILIKE', "%{$search}%")
                             ->orWhere('dueno_nombre', 'ILIKE', "%{$search}%")
-                            ->orWhere('representante_nombre', 'ILIKE', "%{$search}%");
+                            ->orWhere('representante_nombre', 'ILIKE', "%{$search}%")
+                            ->orWhere('responsable_nombre', 'ILIKE', "%{$search}%");
                     });
             });
         }

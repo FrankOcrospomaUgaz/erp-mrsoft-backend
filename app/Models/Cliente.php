@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * Class Cliente
  * 
  * @property int $id
+ * @property int|null $parent_cliente_id
  * @property string $tipo
  * @property string $ruc
  * @property string $razon_social
@@ -41,15 +42,31 @@ class Cliente extends Model
 	protected $table = 'clientes';
 
 	protected $fillable = [
+		'parent_cliente_id',
 		'tipo',
 		'ruc',
 		'razon_social',
+		'nombre_comercial',
+		'direccion',
 		'dueno_nombre',
 		'dueno_celular',
 		'dueno_email',
+		'dueno_es_representante',
+		'dueno_es_responsable',
+		'contacto_igual_empresa',
 		'representante_nombre',
 		'representante_celular',
-		'representante_email'
+		'representante_email',
+		'responsable_nombre',
+		'responsable_celular',
+		'responsable_email'
+	];
+
+	protected $casts = [
+		'parent_cliente_id' => 'int',
+		'dueno_es_representante' => 'bool',
+		'dueno_es_responsable' => 'bool',
+		'contacto_igual_empresa' => 'bool',
 	];
 
 	public function contactos_clientes()
@@ -60,6 +77,16 @@ class Cliente extends Model
 	public function contratos()
 	{
 		return $this->hasMany(Contrato::class);
+	}
+
+	public function parent_cliente()
+	{
+		return $this->belongsTo(Cliente::class, 'parent_cliente_id');
+	}
+
+	public function hijos_clientes()
+	{
+		return $this->hasMany(Cliente::class, 'parent_cliente_id');
 	}
 
 	public function sucursales_clientes()
