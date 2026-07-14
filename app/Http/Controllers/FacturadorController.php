@@ -9,6 +9,39 @@ use Illuminate\Validation\Rule;
 
 class FacturadorController extends Controller
 {
+    public function activo()
+    {
+        $facturador = Facturador::where('activo', true)->latest()->first() ?? Facturador::latest()->first();
+
+        return response()->json([
+            'status' => 200,
+            'data' => $facturador,
+        ]);
+    }
+
+    public function guardarActivo(Request $request)
+    {
+        $validator = $this->validator($request->all(), true);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => 422, 'errors' => $validator->errors()], 422);
+        }
+
+        $facturador = Facturador::where('activo', true)->latest()->first() ?? Facturador::latest()->first();
+
+        if ($facturador) {
+            $facturador->update($validator->validated() + ['activo' => true]);
+        } else {
+            $facturador = Facturador::create($validator->validated() + ['activo' => true]);
+        }
+
+        return response()->json([
+            'status' => 200,
+            'message' => 'Configuración del emisor guardada correctamente',
+            'data' => $facturador,
+        ]);
+    }
+
     public function index()
     {
         return response()->json([

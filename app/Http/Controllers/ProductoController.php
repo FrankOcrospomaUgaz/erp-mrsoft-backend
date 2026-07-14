@@ -15,47 +15,38 @@ class ProductoController extends Controller
         return in_array($tipo, ['servicio', 'producto'], true) ? $tipo : 'servicio';
     }
 
-    /**
-     * Listar todos los productos
-     */
     public function index(Request $request)
     {
         $search = $request->get('search');
+        $all = filter_var($request->get('all', false), FILTER_VALIDATE_BOOLEAN);
         $perPage = $request->get('per_page', 5);
 
-        $productos = Producto::with([
+        $query = Producto::with([
             'modulos.contratos',
             'contratos',
             'avisos_saas',
-        ])
-            ->when($search, function ($query, $search) {
-                $query->where(function ($q) use ($search) {
-                    $q->where('nombre', 'ILIKE', "%{$search}%")
-                        ->orWhere('tipo', 'ILIKE', "%{$search}%")
-                        ->orWhere('descripcion', 'ILIKE', "%{$search}%");
-                });
+        ])->when($search, function ($query, $search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('nombre', 'ILIKE', "%{$search}%")
+                    ->orWhere('tipo', 'ILIKE', "%{$search}%")
+                    ->orWhere('descripcion', 'ILIKE', "%{$search}%");
+            });
 
-                $query->orWhereHas('modulos', function ($q) use ($search) {
-                    $q->where('nombre', 'ILIKE', "%{$search}%")
-                        ->orWhere('precio_unitario', 'ILIKE', "%{$search}%");
-                });
+            $query->orWhereHas('modulos', function ($q) use ($search) {
+                $q->where('nombre', 'ILIKE', "%{$search}%")
+                    ->orWhere('precio_unitario', 'ILIKE', "%{$search}%")
+                    ->orWhere('precio_mensual', 'ILIKE', "%{$search}%")
+                    ->orWhere('precio_anual', 'ILIKE', "%{$search}%");
+            });
+        })->latest();
 
-                $query->orWhereHas('contratos', function ($q) use ($search) {
-                    $q->where('numero', 'ILIKE', "%{$search}%")
-                        ->orWhere('tipo_contrato', 'ILIKE', "%{$search}%")
-                        ->orWhere('forma_pago', 'ILIKE', "%{$search}%")
-                        ->orWhere('total', 'ILIKE', "%{$search}%");
-                });
+        if ($all) {
+            return response()->json(
+                ProductoResource::collection($query->get())
+            );
+        }
 
-                $query->orWhereHas('modulos.contratos', function ($q) use ($search) {
-                    $q->where('numero', 'ILIKE', "%{$search}%")
-                        ->orWhere('tipo_contrato', 'ILIKE', "%{$search}%")
-                        ->orWhere('forma_pago', 'ILIKE', "%{$search}%")
-                        ->orWhere('total', 'ILIKE', "%{$search}%");
-                });
-            })
-            ->latest()
-            ->paginate($perPage);
+        $productos = $query->paginate($perPage);
 
         return response()->json([
             'data' => ProductoResource::collection($productos->items()),
@@ -77,9 +68,6 @@ class ProductoController extends Controller
         ]);
     }
 
-    /**
-     * Mostrar un producto específico
-     */
     public function show($id)
     {
         $producto = Producto::with(['modulos', 'avisos_saas'])->find($id);
@@ -93,31 +81,13 @@ class ProductoController extends Controller
 
         return response()->json([
             'status' => 200,
-            'data' => $producto,
+            'data' => new ProductoResource($producto),
         ], 200);
     }
 
-    /**
-     * Registrar un nuevo producto con módulos
-     */
     public function store(Request $request)
     {
-        $messages = [
-            'nombre.required' => 'El nombre es obligatorio.',
-            'tipo.required' => 'El tipo es obligatorio.',
-            'modulos.*.nombre.required' => 'El nombre del concepto es obligatorio.',
-            'modulos.*.precio_unitario.required' => 'El precio unitario del concepto es obligatorio.',
-            'modulos.*.precio_unitario.numeric' => 'El precio unitario debe ser numérico.',
-        ];
-
-        $validator = Validator::make($request->all(), [
-            'nombre' => 'required|string|max:255',
-            'tipo' => 'required|in:servicio,producto',
-            'descripcion' => 'nullable|string',
-            'modulos' => 'nullable|array',
-            'modulos.*.nombre' => 'required|string|max:255',
-            'modulos.*.precio_unitario' => 'required|numeric|min:0',
-        ], $messages);
+        $validator = Validator::make($request->all(), $this->productRules(), $this->productMessages());
 
         if ($validator->fails()) {
             return response()->json([
@@ -135,10 +105,8 @@ class ProductoController extends Controller
                 'descripcion' => $request->input('descripcion'),
             ]);
 
-            if ($request->filled('modulos')) {
-                foreach ($request->modulos as $modulo) {
-                    $producto->modulos()->create($modulo);
-                }
+            foreach ($request->input('modulos', []) as $modulo) {
+                $producto->modulos()->create($this->mapModuloPayload($modulo));
             }
 
             DB::commit();
@@ -146,9 +114,9 @@ class ProductoController extends Controller
             return response()->json([
                 'status' => 201,
                 'message' => 'Producto creado exitosamente',
-                'data' => $producto->load('modulos'),
+                'data' => new ProductoResource($producto->load('modulos')),
             ], 201);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
 
             return response()->json([
@@ -159,9 +127,6 @@ class ProductoController extends Controller
         }
     }
 
-    /**
-     * Actualizar un producto con módulos
-     */
     public function update(Request $request, $id)
     {
         $producto = Producto::find($id);
@@ -173,22 +138,7 @@ class ProductoController extends Controller
             ], 404);
         }
 
-        $messages = [
-            'nombre.required' => 'El nombre es obligatorio.',
-            'tipo.required' => 'El tipo es obligatorio.',
-            'modulos.*.nombre.required' => 'El nombre del concepto es obligatorio.',
-            'modulos.*.precio_unitario.required' => 'El precio unitario del concepto es obligatorio.',
-            'modulos.*.precio_unitario.numeric' => 'El precio unitario debe ser numérico.',
-        ];
-
-        $validator = Validator::make($request->all(), [
-            'nombre' => 'required|string|max:255',
-            'tipo' => 'required|in:servicio,producto',
-            'descripcion' => 'nullable|string',
-            'modulos' => 'nullable|array',
-            'modulos.*.nombre' => 'required|string|max:255',
-            'modulos.*.precio_unitario' => 'required|numeric|min:0',
-        ], $messages);
+        $validator = Validator::make($request->all(), $this->productRules(), $this->productMessages());
 
         if ($validator->fails()) {
             return response()->json([
@@ -206,11 +156,9 @@ class ProductoController extends Controller
                 'descripcion' => $request->input('descripcion'),
             ]);
 
-            if ($request->has('modulos')) {
-                $producto->modulos()->delete();
-                foreach ($request->modulos as $modulo) {
-                    $producto->modulos()->create($modulo);
-                }
+            $producto->modulos()->delete();
+            foreach ($request->input('modulos', []) as $modulo) {
+                $producto->modulos()->create($this->mapModuloPayload($modulo));
             }
 
             DB::commit();
@@ -218,9 +166,9 @@ class ProductoController extends Controller
             return response()->json([
                 'status' => 200,
                 'message' => 'Producto actualizado correctamente',
-                'data' => $producto->load('modulos'),
+                'data' => new ProductoResource($producto->load('modulos')),
             ], 200);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
 
             return response()->json([
@@ -231,9 +179,6 @@ class ProductoController extends Controller
         }
     }
 
-    /**
-     * Eliminar un producto
-     */
     public function destroy($id)
     {
         $producto = Producto::find($id);
@@ -251,5 +196,43 @@ class ProductoController extends Controller
             'status' => 200,
             'message' => 'Producto eliminado correctamente',
         ], 200);
+    }
+
+    private function productRules(): array
+    {
+        return [
+            'nombre' => 'required|string|max:255',
+            'tipo' => 'required|in:servicio,producto',
+            'descripcion' => 'nullable|string',
+            'modulos' => 'nullable|array',
+            'modulos.*.nombre' => 'required|string|max:255',
+            'modulos.*.precio_mensual' => 'required|numeric|min:0',
+            'modulos.*.precio_anual' => 'required|numeric|min:0',
+        ];
+    }
+
+    private function productMessages(): array
+    {
+        return [
+            'nombre.required' => 'El nombre es obligatorio.',
+            'tipo.required' => 'El tipo es obligatorio.',
+            'modulos.*.nombre.required' => 'El nombre del concepto es obligatorio.',
+            'modulos.*.precio_mensual.required' => 'El precio mensual del concepto es obligatorio.',
+            'modulos.*.precio_mensual.numeric' => 'El precio mensual debe ser numerico.',
+            'modulos.*.precio_anual.required' => 'El precio anual del concepto es obligatorio.',
+            'modulos.*.precio_anual.numeric' => 'El precio anual debe ser numerico.',
+        ];
+    }
+
+    private function mapModuloPayload(array $modulo): array
+    {
+        $precioMensual = (float) ($modulo['precio_mensual'] ?? 0);
+
+        return [
+            'nombre' => $modulo['nombre'],
+            'precio_unitario' => $precioMensual,
+            'precio_mensual' => $precioMensual,
+            'precio_anual' => (float) ($modulo['precio_anual'] ?? 0),
+        ];
     }
 }

@@ -35,12 +35,16 @@ class Modulo extends Model
 
 	protected $casts = [
 		'precio_unitario' => 'float',
+		'precio_mensual' => 'float',
+		'precio_anual' => 'float',
 		'producto_id' => 'int'
 	];
 
 	protected $fillable = [
 		'nombre',
 		'precio_unitario',
+		'precio_mensual',
+		'precio_anual',
 		'producto_id'
 	];
 

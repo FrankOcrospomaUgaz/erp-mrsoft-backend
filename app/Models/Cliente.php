@@ -48,6 +48,7 @@ class Cliente extends Model
 		'razon_social',
 		'nombre_comercial',
 		'direccion',
+		'tipos_local',
 		'dueno_nombre',
 		'dueno_celular',
 		'dueno_email',
@@ -64,6 +65,7 @@ class Cliente extends Model
 
 	protected $casts = [
 		'parent_cliente_id' => 'int',
+		'tipos_local' => 'array',
 		'dueno_es_representante' => 'bool',
 		'dueno_es_responsable' => 'bool',
 		'contacto_igual_empresa' => 'bool',

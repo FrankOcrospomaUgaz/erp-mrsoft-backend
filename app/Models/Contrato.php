@@ -14,8 +14,14 @@ class Contrato extends Model
         'numero',
         'cliente_id',
         'tipo_contrato',
+        'vigencia_contrato',
+        'duracion_anios',
         'total',
-        'forma_pago'
+        'forma_pago',
+        'estado',
+        'periodicidad_cuota',
+        'motivo_anulacion',
+        'fecha_anulacion',
     ];
 
     protected $casts = [
@@ -23,8 +29,13 @@ class Contrato extends Model
         'fecha_fin' => 'date',
         'numero' => 'string',
         'tipo_contrato' => 'string',
+        'vigencia_contrato' => 'string',
+        'duracion_anios' => 'int',
         'total' => 'decimal:2',
-        'forma_pago' => 'string'
+        'forma_pago' => 'string',
+        'estado' => 'string',
+        'periodicidad_cuota' => 'string',
+        'fecha_anulacion' => 'date',
     ];
 
     public static array $rules = [
@@ -33,8 +44,14 @@ class Contrato extends Model
         'numero' => 'required|string|max:255',
         'cliente_id' => 'required',
         'tipo_contrato' => 'required|string|max:255',
+        'vigencia_contrato' => 'nullable|string|max:255',
+        'duracion_anios' => 'nullable|integer|min:1',
         'total' => 'required|numeric',
         'forma_pago' => 'required|string|max:255',
+        'estado' => 'nullable|string|max:255',
+        'periodicidad_cuota' => 'nullable|string|max:255',
+        'motivo_anulacion' => 'nullable|string',
+        'fecha_anulacion' => 'nullable|date',
         'created_at' => 'nullable',
         'updated_at' => 'nullable',
         'deleted_at' => 'nullable'

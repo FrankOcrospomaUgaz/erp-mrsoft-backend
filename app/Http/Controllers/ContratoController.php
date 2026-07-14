@@ -2,19 +2,19 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\{Contrato, Cliente, ContratoProductoModulo, Cuota};
+use App\Http\Resources\ContratoResource;
+use App\Models\Cliente;
+use App\Models\Contrato;
+use App\Models\Facturador;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
-use Illuminate\Support\Facades\DB;
-use App\Http\Resources\ContratoResource;
 
 class ContratoController extends Controller
 {
-    /**
-     * Listar todos los contratos
-     */
-
     public function index(Request $request)
     {
         $query = Contrato::with([
@@ -24,20 +24,18 @@ class ContratoController extends Controller
             'contratoProductoModulos.producto',
         ]);
 
-        // Filtro de búsqueda
         if ($request->filled('search')) {
             $search = $request->get('search');
 
             $query->where(function ($q) use ($search) {
                 $q->where('numero', 'ILIKE', "%{$search}%")
                     ->orWhere('tipo_contrato', 'ILIKE', "%{$search}%")
+                    ->orWhere('estado', 'ILIKE', "%{$search}%")
                     ->orWhereHas('cliente', function ($q2) use ($search) {
                         $q2->where('razon_social', 'ILIKE', "%{$search}%")
                             ->orWhere('nombre_comercial', 'ILIKE', "%{$search}%")
                             ->orWhere('ruc', 'ILIKE', "%{$search}%")
-                            ->orWhere('dueno_nombre', 'ILIKE', "%{$search}%")
-                            ->orWhere('representante_nombre', 'ILIKE', "%{$search}%")
-                            ->orWhere('responsable_nombre', 'ILIKE', "%{$search}%");
+                            ->orWhere('dueno_nombre', 'ILIKE', "%{$search}%");
                     });
             });
         }
@@ -60,14 +58,10 @@ class ContratoController extends Controller
                 'per_page' => $contratos->perPage(),
                 'to' => $contratos->lastItem(),
                 'total' => $contratos->total(),
-            ]
+            ],
         ]);
     }
 
-
-    /**
-     * Mostrar un contrato específico
-     */
     public function show($id)
     {
         $contrato = Contrato::with([
@@ -80,95 +74,100 @@ class ContratoController extends Controller
         if (!$contrato) {
             return response()->json([
                 'status' => 404,
-                'message' => 'Contrato no encontrado'
+                'message' => 'Contrato no encontrado',
             ], 404);
         }
 
         return response()->json([
             'status' => 200,
-            'data' => $contrato
+            'data' => $contrato,
         ], 200);
     }
 
-    /**
-     * Registrar un nuevo contrato
-     */
+    public function pdf($id)
+    {
+        $contrato = Contrato::with([
+            'cliente.parent_cliente.parent_cliente',
+            'cuotas',
+            'contratoProductoModulos.modulo',
+            'contratoProductoModulos.producto',
+        ])->find($id);
 
+        if (!$contrato) {
+            return response()->json([
+                'status' => 404,
+                'message' => 'Contrato no encontrado',
+            ], 404);
+        }
 
+        $cliente = $contrato->cliente;
+        $jerarquia = $this->buildClientHierarchy($cliente);
+        $facturador = Facturador::where('activo', true)->latest()->first() ?? Facturador::latest()->first();
+        $modulosAgrupados = $contrato->contratoProductoModulos
+            ->groupBy(fn($item) => $item->producto?->nombre ?? 'Servicio')
+            ->map(function ($items, $producto) {
+                return [
+                    'producto' => $producto,
+                    'items' => $items,
+                    'subtotal' => $items->sum('precio'),
+                ];
+            })
+            ->values();
+
+        $data = [
+            'contrato' => $contrato,
+            'cliente' => $cliente,
+            'jerarquia' => $jerarquia,
+            'facturador' => $facturador,
+            'modulosAgrupados' => $modulosAgrupados,
+            'fechaEmision' => now(),
+            'vigenciaDescripcion' => $this->resolveVigenciaDescription($contrato),
+            'periodicidadDescripcion' => $contrato->periodicidad_cuota === 'anual' ? 'anual' : 'mensual',
+            'formaPagoDescripcion' => $contrato->forma_pago === 'parcial' ? 'pago fraccionado' : 'pago unico',
+            'tipoContratoDescripcion' => $this->resolveContractTypeDescription($contrato->tipo_contrato),
+            'montoTotalTexto' => $this->formatMoney((float) $contrato->total),
+            'fechaInicioTexto' => $this->formatDateLong($contrato->fecha_inicio),
+            'fechaFinTexto' => $this->formatDateLong($contrato->fecha_fin),
+        ];
+
+        $pdf = Pdf::loadView('pdf.contrato', $data)
+            ->setPaper('a4')
+            ->setOption('isRemoteEnabled', true);
+
+        return response($pdf->output(), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="contrato-' . $contrato->numero . '.pdf"',
+        ]);
+    }
 
     public function store(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'fecha_inicio' => 'required|date',
-            'fecha_fin'    => 'required|date|after:fecha_inicio',
-            'numero'       => ['required', 'string', Rule::unique('contratos', 'numero')],
-            'cliente_id'   => 'required|exists:clientes,id',
-            'tipo_contrato' => 'required|string',
-            'total'        => 'required|numeric|min:0',
-            'forma_pago'   => 'required|string|in:unico,parcial',
-
-            // (Opcional) valida estructura si llegan
-            'productos_modulos'               => 'array',
-            'productos_modulos.*.producto_id' => 'required_with:productos_modulos|exists:productos,id',
-            'productos_modulos.*.modulo_id'   => 'required_with:productos_modulos|exists:modulos,id',
-            'productos_modulos.*.precio'      => 'required_with:productos_modulos|numeric|min:0',
-
-            'cuotas'                          => 'array',
-            'cuotas.*.monto'                  => 'required_with:cuotas|numeric|min:0.01',
-            'cuotas.*.fecha_vencimiento'      => 'required_with:cuotas|date',
-        ], [
-            'forma_pago.in' => 'La forma de pago debe ser unico o parcial.',
-        ]);
+        $validator = Validator::make($request->all(), $this->contractRules(), $this->contractMessages());
+        $this->appendContractValidation($validator, $request);
 
         if ($validator->fails()) {
             return response()->json(['status' => 422, 'errors' => $validator->errors()], 422);
         }
 
         DB::beginTransaction();
+
         try {
-            $contrato = Contrato::create($request->only([
-                'fecha_inicio',
-                'fecha_fin',
-                'numero',
-                'cliente_id',
-                'tipo_contrato',
-                'total',
-                'forma_pago'
-            ]));
+            $contrato = Contrato::create($this->extractContratoAttributes($request));
 
-            // ----- Productos / Módulos -----
-            $productosModulos = collect($request->input('productos_modulos', []))
-                ->filter(fn($pm) => isset($pm['producto_id'], $pm['modulo_id'], $pm['precio']))
-                ->map(fn($pm) => [
-                    'producto_id' => (int)$pm['producto_id'],
-                    'modulo_id'   => (int)$pm['modulo_id'],
-                    'precio'      => (float)$pm['precio'],
-                ])
-                ->values()
-                ->all();
-
+            $productosModulos = $this->mapProductosModulos($request->input('productos_modulos', []));
             if (!empty($productosModulos)) {
                 $contrato->contratoProductoModulos()->createMany($productosModulos);
             }
 
-            // ----- Cuotas (solo si forma_pago = parcial) -----
-            $cuotas = collect($request->input('cuotas', []))
-                ->filter(fn($c) => isset($c['monto'], $c['fecha_vencimiento']))
-                ->map(fn($c) => [
-                    'monto'             => (float)$c['monto'],
-                    'fecha_vencimiento' => $c['fecha_vencimiento'],
-                    'situacion'         => $c['situacion'] ?? 'pendiente',
-                ])
-                ->values()
-                ->all();
-
-            if ($request->input('forma_pago') === 'parcial' && !empty($cuotas)) {
-                $contrato->cuotas()->createMany($cuotas);
+            if ($request->input('forma_pago') === 'parcial') {
+                $cuotas = $this->mapCuotas($request->input('cuotas', []));
+                if (!empty($cuotas)) {
+                    $contrato->cuotas()->createMany($cuotas);
+                }
             }
 
             DB::commit();
 
-            // Devuelve el contrato con todo cargado
             $contrato->load([
                 'cliente',
                 'cuotas',
@@ -177,12 +176,13 @@ class ContratoController extends Controller
             ]);
 
             return response()->json([
-                'status'  => 201,
+                'status' => 201,
                 'message' => 'Contrato creado exitosamente',
-                'data'    => new \App\Http\Resources\ContratoResource($contrato),
+                'data' => new ContratoResource($contrato),
             ], 201);
         } catch (\Throwable $e) {
             DB::rollBack();
+
             return response()->json([
                 'status' => 500,
                 'message' => 'Error al registrar el contrato',
@@ -191,117 +191,49 @@ class ContratoController extends Controller
         }
     }
 
-
-
-
-    /**
-     * Actualizar un contrato
-     */
-
-
     public function update(Request $request, $id)
     {
         $contrato = Contrato::find($id);
 
         if (!$contrato) {
             return response()->json([
-                'status'  => 404,
-                'message' => 'Contrato no encontrado'
+                'status' => 404,
+                'message' => 'Contrato no encontrado',
             ], 404);
         }
 
-        // Reglas de validación para UPDATE (unique ignorando el ID)
-        $rules = [
-            'fecha_inicio' => 'sometimes|date',
-            'fecha_fin'    => 'sometimes|date|after:fecha_inicio',
-            'numero'       => [
-                'sometimes',
-                'string',
-                Rule::unique('contratos', 'numero')->ignore($contrato->id)
-            ],
-            'cliente_id'   => 'sometimes|exists:clientes,id',
-            'tipo_contrato' => 'sometimes|string',
-            'total'        => 'sometimes|numeric|min:0',
-            'forma_pago'   => 'sometimes|string|in:unico,parcial',
-
-            'productos_modulos'               => 'sometimes|array',
-            'productos_modulos.*.producto_id' => 'required_with:productos_modulos|exists:productos,id',
-            'productos_modulos.*.modulo_id'   => 'required_with:productos_modulos|exists:modulos,id',
-            'productos_modulos.*.precio'      => 'required_with:productos_modulos|numeric|min:0',
-
-            'cuotas'                     => 'sometimes|array',
-            'cuotas.*.monto'             => 'required_with:cuotas|numeric|min:0.01',
-            'cuotas.*.fecha_vencimiento' => 'required_with:cuotas|date',
-            // opcionalmente podrías permitir enviar 'situacion' y 'fecha_pago'
-            'cuotas.*.situacion'         => 'in:pendiente,pagado,vencido'
-        ];
-
-        $validator = Validator::make($request->all(), $rules);
+        $validator = Validator::make($request->all(), $this->contractRules($contrato->id, true), $this->contractMessages());
+        $this->appendContractValidation($validator, $request, true);
 
         if ($validator->fails()) {
             return response()->json([
                 'status' => 422,
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
         DB::beginTransaction();
 
         try {
-            // Actualiza solo campos permitidos
-            $contrato->update($request->only([
-                'fecha_inicio',
-                'fecha_fin',
-                'numero',
-                'cliente_id',
-                'tipo_contrato',
-                'total',
-                'forma_pago'
-            ]));
+            $contrato->update($this->extractContratoAttributes($request, true));
 
-            // -------- Productos / Módulos (reemplazo completo) --------
-            $contrato->contratoProductoModulos()->delete(); // Soft delete
-            $productosModulos = collect($request->input('productos_modulos', []))
-                ->filter(fn($pm) => isset($pm['producto_id'], $pm['modulo_id'], $pm['precio']))
-                ->map(fn($pm) => [
-                    'producto_id' => (int)$pm['producto_id'],
-                    'modulo_id'   => (int)$pm['modulo_id'],
-                    'precio'      => (float)$pm['precio'],
-                ])
-                ->values()
-                ->all();
-
-            if (!empty($productosModulos)) {
-                $contrato->contratoProductoModulos()->createMany($productosModulos);
+            if ($request->has('productos_modulos')) {
+                $contrato->contratoProductoModulos()->delete();
+                $productosModulos = $this->mapProductosModulos($request->input('productos_modulos', []));
+                if (!empty($productosModulos)) {
+                    $contrato->contratoProductoModulos()->createMany($productosModulos);
+                }
             }
 
-            // -------- Cuotas --------
             $formaPago = $request->input('forma_pago', $contrato->forma_pago);
-
             if ($formaPago === 'unico') {
-                // Si pasó a pago único, eliminamos todas las cuotas
-                $contrato->cuotas()->delete(); // Soft delete
-            } else { // parcial
-                if ($request->has('cuotas')) {
-                    // Si enviaron cuotas, reemplazar todas
-                    $contrato->cuotas()->delete();
-
-                    $cuotas = collect($request->input('cuotas', []))
-                        ->filter(fn($c) => isset($c['monto'], $c['fecha_vencimiento']))
-                        ->map(fn($c) => [
-                            'monto'             => (float)$c['monto'],
-                            'fecha_vencimiento' => $c['fecha_vencimiento'],
-                            'situacion'         => $c['situacion'] ?? 'pendiente',
-                            'fecha_pago'        => $c['fecha_pago'] ?? null,
-                        ])
-                        ->values()
-                        ->all();
-
-                    if (!empty($cuotas)) {
-                        $contrato->cuotas()->createMany($cuotas);
-                    }
+                $contrato->cuotas()->delete();
+            } elseif ($request->has('cuotas')) {
+                $contrato->cuotas()->delete();
+                $cuotas = $this->mapCuotas($request->input('cuotas', []));
+                if (!empty($cuotas)) {
+                    $contrato->cuotas()->createMany($cuotas);
                 }
-                // Si no enviaron 'cuotas' y sigue siendo parcial, se mantienen las existentes.
             }
 
             DB::commit();
@@ -314,64 +246,264 @@ class ContratoController extends Controller
             ]);
 
             return response()->json([
-                'status'  => 200,
+                'status' => 200,
                 'message' => 'Contrato actualizado correctamente',
-                'data'    => new \App\Http\Resources\ContratoResource($contrato),
+                'data' => new ContratoResource($contrato),
             ], 200);
         } catch (\Throwable $e) {
             DB::rollBack();
 
             return response()->json([
-                'status'  => 500,
+                'status' => 500,
                 'message' => 'Error al actualizar el contrato',
-                'error'   => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
 
-    /**
-     * Eliminar un contrato
-     */
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
         $contrato = Contrato::find($id);
 
         if (!$contrato) {
             return response()->json([
                 'status' => 404,
-                'message' => 'Contrato no encontrado'
+                'message' => 'Contrato no encontrado',
             ], 404);
         }
 
-        DB::beginTransaction();
-
-        try {
-            // Marcar como eliminadas (soft delete) las relaciones
-            $contrato->contratoProductoModulos()->each(function ($pm) {
-                $pm->delete(); // SoftDelete
-            });
-
-            $contrato->cuotas()->each(function ($cuota) {
-                $cuota->delete(); // SoftDelete
-            });
-
-            // Finalmente marcar como eliminado el contrato
-            $contrato->delete(); // SoftDelete
-
-            DB::commit();
-
+        if ($contrato->estado === 'anulado') {
             return response()->json([
-                'status' => 200,
-                'message' => 'Contrato y sus relaciones eliminados correctamente'
-            ], 200);
-        } catch (\Exception $e) {
-            DB::rollBack();
-
-            return response()->json([
-                'status' => 500,
-                'message' => 'Error al eliminar el contrato',
-                'error' => $e->getMessage()
-            ], 500);
+                'status' => 422,
+                'message' => 'El contrato ya se encuentra anulado.',
+            ], 422);
         }
+
+        $validator = Validator::make($request->all(), [
+            'motivo_anulacion' => 'nullable|string',
+            'fecha_anulacion' => 'required|date',
+        ], [
+            'fecha_anulacion.required' => 'La fecha de anulacion es obligatoria.',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 422,
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $contrato->update([
+            'estado' => 'anulado',
+            'motivo_anulacion' => $request->input('motivo_anulacion'),
+            'fecha_anulacion' => $request->input('fecha_anulacion'),
+        ]);
+
+        return response()->json([
+            'status' => 200,
+            'message' => 'Contrato anulado correctamente',
+        ], 200);
+    }
+
+    private function contractRules(?int $contractId = null, bool $partial = false): array
+    {
+        $prefix = $partial ? 'sometimes|' : 'required|';
+
+        return [
+            'fecha_inicio' => $prefix . 'date',
+            'fecha_fin' => $prefix . 'date|after:fecha_inicio',
+            'numero' => [
+                $partial ? 'sometimes' : 'required',
+                'string',
+                Rule::unique('contratos', 'numero')->ignore($contractId),
+            ],
+            'cliente_id' => $prefix . 'exists:clientes,id',
+            'tipo_contrato' => $prefix . 'string|in:desarrollo,saas,soporte',
+            'vigencia_contrato' => $prefix . 'string|in:semestral,anual',
+            'duracion_anios' => 'nullable|integer|min:1',
+            'total' => $prefix . 'numeric|min:0',
+            'forma_pago' => $prefix . 'string|in:unico,parcial',
+            'periodicidad_cuota' => $prefix . 'string|in:mensual,anual',
+            'productos_modulos' => 'nullable|array',
+            'productos_modulos.*.producto_id' => 'required_with:productos_modulos|exists:productos,id',
+            'productos_modulos.*.modulo_id' => 'required_with:productos_modulos|exists:modulos,id',
+            'productos_modulos.*.precio' => 'required_with:productos_modulos|numeric|min:0',
+            'cuotas' => 'nullable|array',
+            'cuotas.*.monto' => 'required_with:cuotas|numeric|min:0.01',
+            'cuotas.*.fecha_vencimiento' => 'required_with:cuotas|date',
+            'cuotas.*.situacion' => 'nullable|in:pendiente,pagado,vencido',
+        ];
+    }
+
+    private function contractMessages(): array
+    {
+        return [
+            'forma_pago.in' => 'La forma de pago debe ser unico o parcial.',
+            'vigencia_contrato.in' => 'La vigencia del contrato debe ser semestral o anual.',
+            'periodicidad_cuota.in' => 'El tipo de pago solo puede ser mensual o anual.',
+        ];
+    }
+
+    private function appendContractValidation($validator, Request $request, bool $partial = false): void
+    {
+        $validator->after(function ($validator) use ($request, $partial) {
+            $tipoContrato = $request->input('tipo_contrato');
+            $formaPago = $request->input('forma_pago');
+            $productos = $request->input('productos_modulos', []);
+            $cuotas = $request->input('cuotas', []);
+
+            if ($tipoContrato === 'saas' && empty($productos)) {
+                $validator->errors()->add('productos_modulos', 'Para contratos SaaS debe seleccionar al menos un producto.');
+            }
+
+            if (!$request->filled('periodicidad_cuota')) {
+                $validator->errors()->add('periodicidad_cuota', 'Debe seleccionar el tipo de pago del contrato.');
+            }
+
+            if ($request->input('vigencia_contrato') === 'anual' && (int) $request->input('duracion_anios', 0) < 1) {
+                $validator->errors()->add('duracion_anios', 'Debe indicar al menos 1 año de duración.');
+            }
+
+            if ($request->input('vigencia_contrato') === 'semestral' && $request->input('periodicidad_cuota') === 'anual') {
+                $validator->errors()->add('periodicidad_cuota', 'Un contrato semestral no puede tener pago anual.');
+            }
+
+            if ($formaPago === 'parcial' && empty($cuotas) && !$partial) {
+                $validator->errors()->add('cuotas', 'Debe registrar al menos una cuota para pago parcial.');
+            }
+        });
+    }
+
+    private function extractContratoAttributes(Request $request, bool $partial = false): array
+    {
+        $attributes = $request->only([
+            'fecha_inicio',
+            'fecha_fin',
+            'numero',
+            'cliente_id',
+            'tipo_contrato',
+            'vigencia_contrato',
+            'duracion_anios',
+            'total',
+            'forma_pago',
+            'periodicidad_cuota',
+        ]);
+
+        if (($request->input('forma_pago') ?? null) === 'unico') {
+            $attributes['periodicidad_cuota'] = $request->input('periodicidad_cuota');
+        }
+
+        if (($request->input('vigencia_contrato') ?? null) === 'semestral') {
+            $attributes['duracion_anios'] = 1;
+        }
+
+        if (!$partial) {
+            $attributes['estado'] = 'activo';
+            $attributes['motivo_anulacion'] = null;
+            $attributes['fecha_anulacion'] = null;
+        }
+
+        return $attributes;
+    }
+
+    private function mapProductosModulos(array $productosModulos): array
+    {
+        return collect($productosModulos)
+            ->filter(fn($pm) => isset($pm['producto_id'], $pm['modulo_id'], $pm['precio']))
+            ->map(fn($pm) => [
+                'producto_id' => (int) $pm['producto_id'],
+                'modulo_id' => (int) $pm['modulo_id'],
+                'precio' => (float) $pm['precio'],
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function mapCuotas(array $cuotas): array
+    {
+        return collect($cuotas)
+            ->filter(fn($c) => isset($c['monto'], $c['fecha_vencimiento']))
+            ->map(fn($c) => [
+                'monto' => (float) $c['monto'],
+                'fecha_vencimiento' => $c['fecha_vencimiento'],
+                'situacion' => $c['situacion'] ?? 'pendiente',
+                'fecha_pago' => $c['fecha_pago'] ?? null,
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function buildClientHierarchy(?Cliente $cliente): array
+    {
+        $linea = [];
+        $cursor = $cliente;
+
+        while ($cursor) {
+            array_unshift($linea, $cursor);
+            $cursor = $cursor->parent_cliente;
+        }
+
+        $root = $linea[0] ?? $cliente;
+        $empresa = collect($linea)->first(fn($item) => $item->tipo === 'empresa');
+        $local = collect($linea)->reverse()->first(fn($item) => $item->tipo === 'local') ?? $cliente;
+
+        return [
+            'linea' => $linea,
+            'root' => $root,
+            'empresa' => $empresa,
+            'local' => $local,
+        ];
+    }
+
+    private function resolveVigenciaDescription(Contrato $contrato): string
+    {
+        if ($contrato->vigencia_contrato === 'semestral') {
+            return 'seis (6) meses';
+        }
+
+        $anios = max(1, (int) ($contrato->duracion_anios ?: 1));
+
+        return $anios === 1
+            ? 'un (1) ano'
+            : $anios . ' anos';
+    }
+
+    private function resolveContractTypeDescription(string $tipo): string
+    {
+        return match ($tipo) {
+            'desarrollo' => 'desarrollo de software',
+            'soporte' => 'soporte tecnico',
+            default => 'licenciamiento y alquiler de software SaaS',
+        };
+    }
+
+    private function formatDateLong($date): string
+    {
+        if (!$date) {
+            return '-';
+        }
+
+        $carbon = $date instanceof Carbon ? $date : Carbon::parse($date);
+        $meses = [
+            1 => 'enero',
+            2 => 'febrero',
+            3 => 'marzo',
+            4 => 'abril',
+            5 => 'mayo',
+            6 => 'junio',
+            7 => 'julio',
+            8 => 'agosto',
+            9 => 'septiembre',
+            10 => 'octubre',
+            11 => 'noviembre',
+            12 => 'diciembre',
+        ];
+
+        return $carbon->day . ' de ' . $meses[(int) $carbon->month] . ' de ' . $carbon->year;
+    }
+
+    private function formatMoney(float $amount): string
+    {
+        return 'S/ ' . number_format($amount, 2, '.', ',');
     }
 }

@@ -232,15 +232,8 @@ class ClienteController extends Controller
         DB::beginTransaction();
 
         try {
-            if ($data['tipo'] === 'empresa' && empty($data['parent_cliente_id'])) {
-                $corporacionData = $this->buildDefaultCorporacionPayload($data);
-                $corporacion = Cliente::create($this->extractClienteAttributes($corporacionData));
-                $this->syncClienteRelations($corporacion, ['contacto' => $corporacionData['contacto'], 'hijos' => [$data]]);
-                $cliente = $corporacion;
-            } else {
-                $cliente = Cliente::create($this->extractClienteAttributes($data));
-                $this->syncClienteRelations($cliente, $data);
-            }
+            $cliente = Cliente::create($this->extractClienteAttributes($data));
+            $this->syncClienteRelations($cliente, $data);
 
             DB::commit();
 
@@ -355,7 +348,7 @@ class ClienteController extends Controller
         $tipo = $this->normalizeTipo($data['tipo'] ?? null);
         $isCorporacion = $tipo === 'corporacion';
         $isEmpresa = $tipo === 'empresa';
-        $uniqueRuc = Rule::unique('clientes', 'ruc');
+        $uniqueRuc = Rule::unique('clientes', 'ruc')->whereNull('deleted_at');
 
         if ($clienteId) {
             $uniqueRuc = $uniqueRuc->ignore($clienteId);
@@ -372,6 +365,8 @@ class ClienteController extends Controller
                 'string',
                 'max:255',
             ],
+            'tipos_local' => ['nullable', 'array'],
+            'tipos_local.*' => ['string', Rule::exists('tipos_locales', 'codigo')->whereNull('deleted_at')],
             'contacto' => ['required', 'array'],
             'contacto.dni' => ['nullable', 'string', 'max:20'],
             'contacto.nombre' => ['required', 'string', 'max:255'],
@@ -388,11 +383,15 @@ class ClienteController extends Controller
             'ruc.unique' => 'Ya existe un cliente con este RUC.',
             'nombre_comercial.required' => 'El nombre comercial es obligatorio.',
             'direccion.required' => 'La dirección es obligatoria para empresas y locales.',
+            'tipos_local.*.exists' => 'Uno o más tipos de local no existen en el catálogo.',
             'contacto.required' => 'Debe registrar un contacto principal.',
             'contacto.nombre.required' => 'El nombre completo del contacto es obligatorio.',
         ]);
 
         $validator->after(function ($validator) use ($data, $tipo) {
+            if ($tipo === 'local' && empty($data['tipos_local'])) {
+                $validator->errors()->add('tipos_local', 'Debe seleccionar al menos un tipo para el local.');
+            }
             $this->validateChildrenRecursively($data['hijos'] ?? [], $tipo, $validator, 'hijos');
         });
 
@@ -415,6 +414,7 @@ class ClienteController extends Controller
         $data['razon_social'] = $this->emptyToNull($data['razon_social'] ?? null);
         $data['nombre_comercial'] = $this->emptyToNull($data['nombre_comercial'] ?? null);
         $data['direccion'] = $this->emptyToNull($data['direccion'] ?? null);
+        $data['tipos_local'] = $this->normalizeTiposLocalPayload($data['tipos_local'] ?? []);
         $data['dueno_nombre'] = $data['contacto']['nombre'] ?? null;
         $data['dueno_celular'] = $data['contacto']['celular'] ?? null;
         $data['dueno_email'] = $data['contacto']['email'] ?? null;
@@ -443,6 +443,7 @@ class ClienteController extends Controller
             'razon_social',
             'nombre_comercial',
             'direccion',
+            'tipos_local',
         ]) + [
             'dueno_nombre' => $contacto['nombre'] ?? null,
             'dueno_celular' => $contacto['celular'] ?? null,
@@ -605,6 +606,23 @@ class ClienteController extends Controller
         }, $contactos)));
     }
 
+    private function normalizeTiposLocalPayload($tipos): array
+    {
+        if (!is_array($tipos)) {
+            return [];
+        }
+
+        return array_values(array_unique(array_filter(array_map(function ($tipo) {
+            if (!is_string($tipo)) {
+                return null;
+            }
+
+            $tipo = trim($tipo);
+
+            return $tipo !== '' ? $tipo : null;
+        }, $tipos))));
+    }
+
     private function createContactoCliente(Cliente $cliente, array $contacto): void
     {
         if (empty($contacto['nombre'])) {
@@ -617,20 +635,6 @@ class ClienteController extends Controller
             'celular' => $contacto['celular'] ?? null,
             'email' => $contacto['email'] ?? null,
         ]);
-    }
-
-    private function buildDefaultCorporacionPayload(array $empresa): array
-    {
-        return [
-            'tipo' => 'corporacion',
-            'ruc' => $this->emptyToNull($empresa['ruc'] ?? null),
-            'razon_social' => $this->emptyToNull($empresa['razon_social'] ?? null),
-            'nombre_comercial' => $this->emptyToNull(($empresa['nombre_comercial'] ?? 'Consorcio') . ' - Consorcio'),
-            'direccion' => null,
-            'contacto' => $empresa['contacto'] ?? ['dni' => null, 'nombre' => null, 'celular' => null, 'email' => null],
-            'contactos' => $empresa['contactos'] ?? [$empresa['contacto'] ?? ['dni' => null, 'nombre' => null, 'celular' => null, 'email' => null]],
-            'hijos' => [],
-        ];
     }
 
     private function emptyToNull($value): ?string
@@ -702,6 +706,7 @@ class ClienteController extends Controller
             $child['razon_social'] = $this->emptyToNull($child['razon_social'] ?? null);
             $child['nombre_comercial'] = $this->emptyToNull($child['nombre_comercial'] ?? null);
             $child['direccion'] = $this->emptyToNull($child['direccion'] ?? null);
+            $child['tipos_local'] = $this->normalizeTiposLocalPayload($child['tipos_local'] ?? []);
             $childContactos = $this->normalizeContactosPayload($child['contactos'] ?? []);
             $child['contacto'] = $this->normalizeContactoPayload($child['contacto'] ?? Arr::first($childContactos) ?? []);
             if (empty($child['contacto']['nombre']) && count($childContactos) > 0) {
@@ -759,6 +764,10 @@ class ClienteController extends Controller
 
             if (in_array($childType, ['empresa', 'local'], true) && empty($child['direccion'])) {
                 $validator->errors()->add("{$childPath}.direccion", 'La dirección es obligatoria.');
+            }
+
+            if ($childType === 'local' && empty($child['tipos_local'])) {
+                $validator->errors()->add("{$childPath}.tipos_local", 'Debe seleccionar al menos un tipo para el local.');
             }
 
             if (empty($child['contacto']['nombre'])) {

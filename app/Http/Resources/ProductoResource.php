@@ -7,11 +7,6 @@ use Illuminate\Http\Resources\Json\JsonResource;
 
 class ProductoResource extends JsonResource
 {
-    /**
-     * Transform the resource into an array.
-     *
-     * @return array<string, mixed>
-     */
     public function toArray(Request $request): array
     {
         return [
@@ -19,8 +14,19 @@ class ProductoResource extends JsonResource
             'nombre' => $this->nombre,
             'tipo' => $this->tipo ?? 'servicio',
             'descripcion' => $this->descripcion,
-            'modulos' => $this->modulos, // Si necesitas más detalle, puedes usar ModuloResource
-            'avisos_saas' => $this->avisos_saas, // Igual, puedes mapear o usar recurso
+            'modulos' => $this->modulos->map(fn($modulo) => [
+                'id' => $modulo->id,
+                'nombre' => $modulo->nombre,
+                'precio_unitario' => $modulo->precio_unitario,
+                'precio_mensual' => $modulo->precio_mensual,
+                'precio_anual' => $modulo->precio_anual,
+                'producto_id' => $modulo->producto_id,
+                'created_at' => $modulo->created_at,
+                'updated_at' => $modulo->updated_at,
+                'deleted_at' => $modulo->deleted_at,
+                'contratos' => $modulo->contratos ?? [],
+            ]),
+            'avisos_saas' => $this->avisos_saas,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

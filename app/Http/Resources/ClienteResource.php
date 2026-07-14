@@ -21,6 +21,7 @@ class ClienteResource extends JsonResource
             'razon_social' => $this->razon_social,
             'nombre_comercial' => $this->nombre_comercial,
             'direccion' => $this->direccion,
+            'tipos_local' => $this->tipos_local ?? [],
             'nombre_cliente' => $this->razon_social ?? $this->nombre_comercial ?? $this->dueno_nombre,
             'contacto_principal' => $this->contactos_clientes->first() ? [
                 'dni' => $this->contactos_clientes->first()->dni,
