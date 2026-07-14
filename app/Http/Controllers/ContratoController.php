@@ -15,6 +15,29 @@ use Illuminate\Validation\Rule;
 
 class ContratoController extends Controller
 {
+    public function siguienteNumero()
+    {
+        $year = now()->year;
+        $pattern = '/^CT-' . $year . '-(\d+)$/';
+
+        $lastSequence = Contrato::withTrashed()
+            ->get(['numero'])
+            ->reduce(function (int $carry, Contrato $contrato) use ($pattern) {
+                if (!preg_match($pattern, (string) $contrato->numero, $matches)) {
+                    return $carry;
+                }
+
+                return max($carry, (int) $matches[1]);
+            }, 0);
+
+        return response()->json([
+            'status' => 200,
+            'data' => [
+                'numero' => sprintf('CT-%s-%03d', $year, $lastSequence + 1),
+            ],
+        ]);
+    }
+
     public function index(Request $request)
     {
         $query = Contrato::with([
@@ -126,6 +149,7 @@ class ContratoController extends Controller
             'formaPagoDescripcion' => $contrato->forma_pago === 'parcial' ? 'pago fraccionado' : 'pago unico',
             'tipoContratoDescripcion' => $this->resolveContractTypeDescription($contrato->tipo_contrato),
             'montoTotalTexto' => $this->formatMoney((float) $contrato->total),
+            'montoTotalLetras' => $this->amountToWords((float) $contrato->total),
             'fechaInicioTexto' => $this->formatDateLong($contrato->fecha_inicio),
             'fechaFinTexto' => $this->formatDateLong($contrato->fecha_fin),
         ];
@@ -505,5 +529,71 @@ class ContratoController extends Controller
     private function formatMoney(float $amount): string
     {
         return 'S/ ' . number_format($amount, 2, '.', ',');
+    }
+
+    private function amountToWords(float $amount): string
+    {
+        $enteros = (int) floor($amount);
+        $centimos = (int) round(($amount - $enteros) * 100);
+
+        return strtoupper(trim($this->numberToSpanish($enteros))) . ' CON ' . str_pad((string) $centimos, 2, '0', STR_PAD_LEFT) . '/100 SOLES';
+    }
+
+    private function numberToSpanish(int $number): string
+    {
+        $units = [
+            0 => 'cero', 1 => 'uno', 2 => 'dos', 3 => 'tres', 4 => 'cuatro',
+            5 => 'cinco', 6 => 'seis', 7 => 'siete', 8 => 'ocho', 9 => 'nueve',
+            10 => 'diez', 11 => 'once', 12 => 'doce', 13 => 'trece', 14 => 'catorce',
+            15 => 'quince', 16 => 'dieciseis', 17 => 'diecisiete', 18 => 'dieciocho',
+            19 => 'diecinueve', 20 => 'veinte', 21 => 'veintiuno', 22 => 'veintidos',
+            23 => 'veintitres', 24 => 'veinticuatro', 25 => 'veinticinco', 26 => 'veintiseis',
+            27 => 'veintisiete', 28 => 'veintiocho', 29 => 'veintinueve',
+        ];
+
+        $tens = [
+            30 => 'treinta', 40 => 'cuarenta', 50 => 'cincuenta',
+            60 => 'sesenta', 70 => 'setenta', 80 => 'ochenta', 90 => 'noventa',
+        ];
+
+        $hundreds = [
+            100 => 'cien', 200 => 'doscientos', 300 => 'trescientos',
+            400 => 'cuatrocientos', 500 => 'quinientos', 600 => 'seiscientos',
+            700 => 'setecientos', 800 => 'ochocientos', 900 => 'novecientos',
+        ];
+
+        if ($number < 30) {
+            return $units[$number];
+        }
+
+        if ($number < 100) {
+            $base = intdiv($number, 10) * 10;
+            $resto = $number % 10;
+            return $resto === 0 ? $tens[$base] : $tens[$base] . ' y ' . $this->numberToSpanish($resto);
+        }
+
+        if ($number < 1000) {
+            if ($number === 100) {
+                return 'cien';
+            }
+
+            $base = intdiv($number, 100) * 100;
+            $resto = $number % 100;
+            $prefijo = $base === 100 ? 'ciento' : $hundreds[$base];
+            return $resto === 0 ? $prefijo : $prefijo . ' ' . $this->numberToSpanish($resto);
+        }
+
+        if ($number < 1000000) {
+            $miles = intdiv($number, 1000);
+            $resto = $number % 1000;
+            $prefijo = $miles === 1 ? 'mil' : $this->numberToSpanish($miles) . ' mil';
+            return $resto === 0 ? $prefijo : $prefijo . ' ' . $this->numberToSpanish($resto);
+        }
+
+        $millones = intdiv($number, 1000000);
+        $resto = $number % 1000000;
+        $prefijo = $millones === 1 ? 'un millon' : $this->numberToSpanish($millones) . ' millones';
+
+        return $resto === 0 ? $prefijo : $prefijo . ' ' . $this->numberToSpanish($resto);
     }
 }

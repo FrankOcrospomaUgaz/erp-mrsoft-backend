@@ -41,6 +41,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('clientes', App\Http\Controllers\ClienteController::class);
     Route::get('clientes/{id}/sucursales', [App\Http\Controllers\ClienteController::class, 'sucursalesPorCliente']);
     Route::apiResource('pagos', App\Http\Controllers\PagoCuotumController::class);
+    Route::get('contratos/siguiente-numero', [App\Http\Controllers\ContratoController::class, 'siguienteNumero']);
     Route::get('contratos/{id}/pdf', [App\Http\Controllers\ContratoController::class, 'pdf']);
     Route::apiResource('contratos', App\Http\Controllers\ContratoController::class);
     Route::apiResource('cuotas', App\Http\Controllers\CuotaController::class);
