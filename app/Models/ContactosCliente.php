@@ -33,7 +33,9 @@ class ContactosCliente extends Model
 	protected $table = 'contactos_cliente';
 
 	protected $casts = [
-		'cliente_id' => 'int'
+		'cliente_id' => 'int',
+		'es_dueno' => 'boolean',
+		'es_vendedor' => 'boolean'
 	];
 
 	protected $fillable = [
@@ -41,7 +43,9 @@ class ContactosCliente extends Model
 		'dni',
 		'nombre',
 		'celular',
-		'email'
+		'email',
+		'es_dueno',
+		'es_vendedor'
 	];
 
 	public function cliente()

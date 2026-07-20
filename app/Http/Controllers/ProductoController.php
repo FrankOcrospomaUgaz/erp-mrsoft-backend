@@ -206,6 +206,7 @@ class ProductoController extends Controller
             'descripcion' => 'nullable|string',
             'modulos' => 'nullable|array',
             'modulos.*.nombre' => 'required|string|max:255',
+            'modulos.*.descripcion_contrato' => 'nullable|string',
             'modulos.*.precio_mensual' => 'required|numeric|min:0',
             'modulos.*.precio_anual' => 'required|numeric|min:0',
         ];
@@ -230,6 +231,7 @@ class ProductoController extends Controller
 
         return [
             'nombre' => $modulo['nombre'],
+            'descripcion_contrato' => $modulo['descripcion_contrato'] ?? null,
             'precio_unitario' => $precioMensual,
             'precio_mensual' => $precioMensual,
             'precio_anual' => (float) ($modulo['precio_anual'] ?? 0),

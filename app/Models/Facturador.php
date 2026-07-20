@@ -12,6 +12,7 @@ class Facturador extends Model
     protected $table = 'facturadores';
 
     protected $fillable = [
+        'empresa_id',
         'ruc',
         'razon_social',
         'nombre_comercial',

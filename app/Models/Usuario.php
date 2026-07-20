@@ -16,7 +16,7 @@ use Laravel\Sanctum\HasApiTokens;
  * 
  * @property int $id
  * @property string $nombres
- * @property string $apellidos
+ * @property string|null $apellidos
  * @property string $usuario
  * @property string $password
  * @property int $tipo_usuario_id
@@ -34,6 +34,7 @@ class Usuario extends Model
 	protected $table = 'usuarios';
 
 	protected $casts = [
+		'cliente_id' => 'int',
 		'tipo_usuario_id' => 'int'
 	];
 
@@ -42,6 +43,7 @@ class Usuario extends Model
 	];
 
 	protected $fillable = [
+		'cliente_id',
 		'nombres',
 		'apellidos',
 		'usuario',
@@ -52,5 +54,10 @@ class Usuario extends Model
 	public function tipos_usuario()
 	{
 		return $this->belongsTo(TiposUsuario::class, 'tipo_usuario_id');
+	}
+
+	public function cliente()
+	{
+		return $this->belongsTo(Cliente::class);
 	}
 }

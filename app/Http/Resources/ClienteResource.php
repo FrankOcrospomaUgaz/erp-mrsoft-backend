@@ -28,6 +28,8 @@ class ClienteResource extends JsonResource
                 'nombre' => $this->contactos_clientes->first()->nombre,
                 'celular' => $this->contactos_clientes->first()->celular,
                 'email' => $this->contactos_clientes->first()->email,
+                'es_dueno' => (bool) $this->contactos_clientes->first()->es_dueno,
+                'es_vendedor' => (bool) $this->contactos_clientes->first()->es_vendedor,
             ] : null,
             'dueno_nombre' => $this->dueno_nombre,
             'dueno_celular' => $this->dueno_celular,

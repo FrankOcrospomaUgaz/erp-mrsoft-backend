@@ -9,8 +9,17 @@ use Illuminate\Validation\Rule;
 
 class FacturadorController extends Controller
 {
+    private function denyCliente(Request $request)
+    {
+        if ($request->user()?->cliente_id) {
+            abort(response()->json(['status' => 403, 'message' => 'No autorizado'], 403));
+        }
+    }
+
     public function activo()
     {
+        $this->denyCliente(request());
+
         $facturador = Facturador::where('activo', true)->latest()->first() ?? Facturador::latest()->first();
 
         return response()->json([
@@ -21,6 +30,8 @@ class FacturadorController extends Controller
 
     public function guardarActivo(Request $request)
     {
+        $this->denyCliente($request);
+
         $validator = $this->validator($request->all(), true);
 
         if ($validator->fails()) {
@@ -44,6 +55,8 @@ class FacturadorController extends Controller
 
     public function index()
     {
+        $this->denyCliente(request());
+
         return response()->json([
             'data' => Facturador::latest()->get(),
         ]);
@@ -51,6 +64,8 @@ class FacturadorController extends Controller
 
     public function store(Request $request)
     {
+        $this->denyCliente($request);
+
         $validator = $this->validator($request->all());
 
         if ($validator->fails()) {
@@ -64,6 +79,8 @@ class FacturadorController extends Controller
 
     public function show($id)
     {
+        $this->denyCliente(request());
+
         $facturador = Facturador::find($id);
 
         if (!$facturador) {
@@ -75,6 +92,8 @@ class FacturadorController extends Controller
 
     public function update(Request $request, $id)
     {
+        $this->denyCliente($request);
+
         $facturador = Facturador::find($id);
 
         if (!$facturador) {
@@ -94,6 +113,8 @@ class FacturadorController extends Controller
 
     public function destroy($id)
     {
+        $this->denyCliente(request());
+
         $facturador = Facturador::find($id);
 
         if (!$facturador) {
@@ -110,6 +131,7 @@ class FacturadorController extends Controller
         $required = $updating ? 'sometimes' : 'required';
 
         return Validator::make($data, [
+            'empresa_id' => ['nullable', 'string', 'max:50'],
             'ruc' => ['nullable', 'string', 'max:20'],
             'razon_social' => ['nullable', 'string', 'max:255'],
             'nombre_comercial' => [$required, 'string', 'max:255'],

@@ -17,6 +17,7 @@ class ProductoResource extends JsonResource
             'modulos' => $this->modulos->map(fn($modulo) => [
                 'id' => $modulo->id,
                 'nombre' => $modulo->nombre,
+                'descripcion_contrato' => $modulo->descripcion_contrato,
                 'precio_unitario' => $modulo->precio_unitario,
                 'precio_mensual' => $modulo->precio_mensual,
                 'precio_anual' => $modulo->precio_anual,

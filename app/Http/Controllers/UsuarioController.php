@@ -55,7 +55,7 @@ public function index(Request $request)
     {
         $request->validate([
             'nombres' => 'required|string',
-            'apellidos' => 'required|string',
+            'apellidos' => 'nullable|string',
             'usuario' => 'required|string|unique:usuarios,usuario',
             'password' => 'required|string',
             'tipo_usuario_id' => 'required|integer'
@@ -73,6 +73,14 @@ public function index(Request $request)
     public function update(Request $request, $id)
     {
         $usuario = Usuario::findOrFail($id);
+        $request->validate([
+            'nombres' => 'sometimes|required|string',
+            'apellidos' => 'nullable|string',
+            'usuario' => 'sometimes|required|string|unique:usuarios,usuario,' . $usuario->id,
+            'password' => 'nullable|string',
+            'tipo_usuario_id' => 'sometimes|required|integer',
+        ]);
+
         if ($request->filled('password')) {
             $request['password'] = Hash::make($request->password);
         } else {

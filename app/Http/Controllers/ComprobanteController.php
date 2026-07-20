@@ -3,8 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Http\Resources\ComprobanteResource;
+use App\Models\Cliente;
 use App\Models\Comprobante;
+use App\Models\Facturador;
 use App\Services\Facturacion\ComprobanteService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
@@ -20,16 +23,21 @@ class ComprobanteController extends Controller
     {
         $search = $request->get('search');
         $perPage = (int) $request->get('per_page', 10);
+        $clienteIds = $this->accessibleClienteIds($request);
 
         $query = Comprobante::with(['cliente.contactos_clientes', 'detalles'])
             ->latest()
+            ->when($clienteIds, fn ($query) => $query->whereIn('cliente_id', $clienteIds))
             ->when($search, function ($query, $search) {
-                $query->where('serie', 'ILIKE', "%{$search}%")
+                $query->where(function ($query) use ($search) {
+                    $query->where('serie', 'ILIKE', "%{$search}%")
+                    ->orWhereRaw('CAST(correlativo AS TEXT) ILIKE ?', ["%{$search}%"])
                     ->orWhereHas('cliente', function ($cliente) use ($search) {
                         $cliente->where('ruc', 'ILIKE', "%{$search}%")
                             ->orWhere('razon_social', 'ILIKE', "%{$search}%")
                             ->orWhere('nombre_comercial', 'ILIKE', "%{$search}%");
                     });
+                });
             });
 
         $comprobantes = $query->paginate($perPage);
@@ -51,7 +59,7 @@ class ComprobanteController extends Controller
         ]);
     }
 
-    public function show($id)
+    public function show(Request $request, $id)
     {
         $comprobante = Comprobante::with(['cliente.contactos_clientes', 'detalles', 'facturador'])->find($id);
 
@@ -59,11 +67,19 @@ class ComprobanteController extends Controller
             return response()->json(['status' => 404, 'message' => 'Comprobante no encontrado'], 404);
         }
 
+        if (!$this->canAccessComprobante($request, $comprobante)) {
+            return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
+        }
+
         return response()->json(['status' => 200, 'data' => new ComprobanteResource($comprobante)]);
     }
 
     public function store(Request $request)
     {
+        if ($request->user()?->cliente_id) {
+            return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
+        }
+
         $validator = $this->validator($request->all());
 
         if ($validator->fails()) {
@@ -79,8 +95,12 @@ class ComprobanteController extends Controller
         ], 201);
     }
 
-    public function emitir($id)
+    public function emitir(Request $request, $id)
     {
+        if ($request->user()?->cliente_id) {
+            return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
+        }
+
         $comprobante = Comprobante::find($id);
 
         if (!$comprobante) {
@@ -98,6 +118,10 @@ class ComprobanteController extends Controller
 
     public function emisionMasiva(Request $request)
     {
+        if ($request->user()?->cliente_id) {
+            return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
+        }
+
         $validator = $this->validator($request->all(), true);
 
         if ($validator->fails()) {
@@ -121,8 +145,12 @@ class ComprobanteController extends Controller
         ]);
     }
 
-    public function reenviarPendientes()
+    public function reenviarPendientes(Request $request)
     {
+        if ($request->user()?->cliente_id) {
+            return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
+        }
+
         $pendientes = Comprobante::whereIn('estado', ['E', 'X'])->get();
         $resultados = [];
 
@@ -145,14 +173,62 @@ class ComprobanteController extends Controller
         return response()->json(['status' => 200, 'data' => $resultados]);
     }
 
-    public function downloadXml($id)
+    public function downloadXml(Request $request, $id)
     {
-        return $this->downloadStoredFile((int) $id, 'xml_path', 'xml-request.json');
+        return $this->downloadStoredFile($request, (int) $id, 'xml_path', 'xml-request.json');
     }
 
-    public function downloadCdr($id)
+    public function downloadCdr(Request $request, $id)
     {
-        return $this->downloadStoredFile((int) $id, 'cdr_path', 'cdr-response.json');
+        return $this->downloadStoredFile($request, (int) $id, 'cdr_path', 'cdr-response.json');
+    }
+
+    public function pdf(Request $request, $id)
+    {
+        $comprobante = Comprobante::with([
+            'cliente.contactos_clientes',
+            'detalles.producto',
+            'detalles.modulo',
+            'facturador',
+        ])->find($id);
+
+        if (!$comprobante) {
+            return response()->json(['status' => 404, 'message' => 'Comprobante no encontrado'], 404);
+        }
+
+        if (!$this->canAccessComprobante($request, $comprobante)) {
+            return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
+        }
+
+        $facturador = $comprobante->facturador
+            ?? Facturador::where('activo', true)->latest()->first()
+            ?? Facturador::latest()->first();
+
+        $cliente = $comprobante->cliente;
+        $contacto = $cliente?->contactos_clientes?->first();
+        $tipoDocumento = match ($comprobante->tipo_documento) {
+            'F' => 'FACTURA DE VENTA ELECTRONICA',
+            'B' => 'BOLETA DE VENTA ELECTRONICA',
+            'C' => 'NOTA DE CREDITO ELECTRONICA',
+            'D' => 'NOTA DE DEBITO ELECTRONICA',
+            default => 'COMPROBANTE ELECTRONICO',
+        };
+
+        $pdf = Pdf::loadView('pdf.comprobante', [
+            'comprobante' => $comprobante,
+            'facturador' => $facturador,
+            'cliente' => $cliente,
+            'contacto' => $contacto,
+            'tipoDocumento' => $tipoDocumento,
+            'numeroComprobante' => $comprobante->serie . '-' . str_pad((string) $comprobante->correlativo, 6, '0', STR_PAD_LEFT),
+            'monedaSimbolo' => strtoupper((string) $comprobante->moneda) === 'USD' ? '$' : 'S/',
+            'formaPago' => $comprobante->forma_pago === 'D' ? 'CREDITO' : 'CONTADO',
+        ])->setPaper('a4');
+
+        return response($pdf->output(), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="comprobante-' . $comprobante->serie . '-' . $comprobante->correlativo . '.pdf"',
+        ]);
     }
 
     private function validator(array $data, bool $masivo = false)
@@ -186,14 +262,51 @@ class ComprobanteController extends Controller
         ]);
     }
 
-    private function downloadStoredFile(int $id, string $field, string $filename)
+    private function downloadStoredFile(Request $request, int $id, string $field, string $filename)
     {
         $comprobante = Comprobante::find($id);
+
+        if ($comprobante && !$this->canAccessComprobante($request, $comprobante)) {
+            return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
+        }
 
         if (!$comprobante || !$comprobante->{$field} || !Storage::disk('local')->exists($comprobante->{$field})) {
             return response()->json(['status' => 404, 'message' => 'Archivo no encontrado'], 404);
         }
 
         return Storage::disk('local')->download($comprobante->{$field}, $filename);
+    }
+
+    private function canAccessComprobante(Request $request, Comprobante $comprobante): bool
+    {
+        $clienteIds = $this->accessibleClienteIds($request);
+
+        return !$clienteIds || in_array((int) $comprobante->cliente_id, $clienteIds, true);
+    }
+
+    private function accessibleClienteIds(Request $request): array
+    {
+        $clienteId = $request->user()?->cliente_id;
+
+        if (!$clienteId) {
+            return [];
+        }
+
+        $ids = [(int) $clienteId];
+        $pending = [(int) $clienteId];
+
+        while (!empty($pending)) {
+            $children = Cliente::query()
+                ->whereIn('parent_cliente_id', $pending)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+
+            $children = array_values(array_diff($children, $ids));
+            $ids = array_values(array_unique(array_merge($ids, $children)));
+            $pending = $children;
+        }
+
+        return $ids;
     }
 }

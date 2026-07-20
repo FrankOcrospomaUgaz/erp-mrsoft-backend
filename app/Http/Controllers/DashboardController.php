@@ -15,6 +15,10 @@ class DashboardController extends Controller
 {
     public function resumen()
     {
+        if (request()->user()?->cliente_id) {
+            return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
+        }
+
         $today = Carbon::today();
         $monthStart = $today->copy()->startOfMonth();
         $monthEnd = $today->copy()->endOfMonth();
@@ -66,6 +70,7 @@ class DashboardController extends Controller
             ->first() ?? Facturador::latest()->first();
 
         $facturadorConfigured = $facturadorActivo
+            && filled($facturadorActivo->empresa_id)
             && filled($facturadorActivo->ruc)
             && filled($facturadorActivo->razon_social)
             && filled($facturadorActivo->usuario_sol)
@@ -196,6 +201,7 @@ class DashboardController extends Controller
                 ],
                 'facturador' => [
                     'configurado' => $facturadorConfigured,
+                    'empresa_id' => $facturadorActivo?->empresa_id,
                     'modo' => $facturadorActivo?->modo,
                     'ruc' => $facturadorActivo?->ruc,
                     'razon_social' => $facturadorActivo?->razon_social,

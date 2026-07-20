@@ -4,9 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Http\Resources\ClienteResource;
 use App\Models\Cliente;
+use App\Models\TiposUsuario;
+use App\Models\Usuario;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -234,6 +237,7 @@ class ClienteController extends Controller
         try {
             $cliente = Cliente::create($this->extractClienteAttributes($data));
             $this->syncClienteRelations($cliente, $data);
+            $this->ensureClientePortalUser($cliente->fresh());
 
             DB::commit();
 
@@ -283,6 +287,7 @@ class ClienteController extends Controller
         try {
             $cliente->update($this->extractClienteAttributes($data));
             $this->syncClienteRelations($cliente, $data);
+            $this->ensureClientePortalUser($cliente->fresh());
 
             DB::commit();
 
@@ -343,6 +348,138 @@ class ClienteController extends Controller
         ]);
     }
 
+    public function portalUser($id)
+    {
+        $cliente = Cliente::find($id);
+
+        if (!$cliente) {
+            return response()->json([
+                'status' => 404,
+                'message' => 'Cliente no encontrado',
+            ], 404);
+        }
+
+        $usuario = Usuario::withTrashed()
+            ->where('cliente_id', $cliente->id)
+            ->latest()
+            ->first();
+
+        return response()->json([
+            'status' => 200,
+            'data' => [
+                'cliente_id' => $cliente->id,
+                'exists' => (bool) $usuario,
+                'usuario' => $usuario ? [
+                    'id' => $usuario->id,
+                    'nombres' => $usuario->nombres,
+                    'apellidos' => $usuario->apellidos,
+                    'usuario' => $usuario->usuario,
+                    'tipo_usuario_id' => $usuario->tipo_usuario_id,
+                    'deleted_at' => $usuario->deleted_at,
+                ] : null,
+                'password_visible' => null,
+                'password_message' => 'La contraseña actual no se puede ver porque esta guardada encriptada. Puedes definir una nueva.',
+            ],
+        ]);
+    }
+
+    public function savePortalUser(Request $request, $id)
+    {
+        $cliente = Cliente::find($id);
+
+        if (!$cliente) {
+            return response()->json([
+                'status' => 404,
+                'message' => 'Cliente no encontrado',
+            ], 404);
+        }
+
+        $usuarioActual = Usuario::withTrashed()
+            ->where('cliente_id', $cliente->id)
+            ->latest()
+            ->first();
+
+        $validator = Validator::make($request->all(), [
+            'usuario' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('usuarios', 'usuario')->ignore($usuarioActual?->id),
+            ],
+            'password' => [
+                $usuarioActual ? 'nullable' : 'required',
+                'string',
+                'min:4',
+                'max:255',
+            ],
+            'nombres' => ['nullable', 'string', 'max:255'],
+            'apellidos' => ['nullable', 'string', 'max:255'],
+        ], [
+            'usuario.required' => 'El usuario es obligatorio.',
+            'usuario.unique' => 'Ya existe otro usuario con ese login.',
+            'password.required' => 'La contraseña es obligatoria para crear el acceso.',
+            'password.min' => 'La contraseña debe tener al menos 4 caracteres.',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 422,
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $tipoCliente = TiposUsuario::firstOrCreate(['nombre' => 'Cliente']);
+        $nombre = $request->input('nombres')
+            ?: $cliente->razon_social
+            ?: $cliente->nombre_comercial
+            ?: $cliente->dueno_nombre
+            ?: 'Cliente';
+
+        $attributes = [
+            'cliente_id' => $cliente->id,
+            'nombres' => $nombre,
+            'apellidos' => $request->input('apellidos') ?: null,
+            'usuario' => $request->input('usuario'),
+            'tipo_usuario_id' => $tipoCliente->id,
+        ];
+
+        if ($request->filled('password')) {
+            $attributes['password'] = Hash::make($request->input('password'));
+        }
+
+        if ($usuarioActual) {
+            if (method_exists($usuarioActual, 'trashed') && $usuarioActual->trashed()) {
+                $usuarioActual->restore();
+            }
+
+            $usuarioActual->update($attributes);
+            $usuario = $usuarioActual->fresh();
+        } else {
+            $usuario = Usuario::create($attributes);
+        }
+
+        return response()->json([
+            'status' => 200,
+            'message' => 'Acceso de cliente guardado correctamente.',
+            'data' => [
+                'cliente_id' => $cliente->id,
+                'exists' => true,
+                'usuario' => [
+                    'id' => $usuario->id,
+                    'nombres' => $usuario->nombres,
+                    'apellidos' => $usuario->apellidos,
+                    'usuario' => $usuario->usuario,
+                    'tipo_usuario_id' => $usuario->tipo_usuario_id,
+                    'deleted_at' => $usuario->deleted_at,
+                ],
+                'password_visible' => $request->filled('password') ? $request->input('password') : null,
+                'password_message' => $request->filled('password')
+                    ? 'Nueva contraseña asignada. Solo se muestra en esta respuesta.'
+                    : 'El usuario fue actualizado sin cambiar la contraseña.',
+            ],
+        ]);
+    }
+
     private function makeClienteValidator(array $data, ?int $clienteId = null)
     {
         $tipo = $this->normalizeTipo($data['tipo'] ?? null);
@@ -372,11 +509,15 @@ class ClienteController extends Controller
             'contacto.nombre' => ['required', 'string', 'max:255'],
             'contacto.celular' => ['nullable', 'string', 'max:20'],
             'contacto.email' => ['nullable', 'email', 'max:255'],
+            'contacto.es_dueno' => ['nullable', 'boolean'],
+            'contacto.es_vendedor' => ['nullable', 'boolean'],
             'contactos' => ['nullable', 'array'],
             'contactos.*.dni' => ['nullable', 'string', 'max:20'],
             'contactos.*.nombre' => ['required', 'string', 'max:255'],
             'contactos.*.celular' => ['nullable', 'string', 'max:20'],
             'contactos.*.email' => ['nullable', 'email', 'max:255'],
+            'contactos.*.es_dueno' => ['nullable', 'boolean'],
+            'contactos.*.es_vendedor' => ['nullable', 'boolean'],
             'hijos' => 'nullable|array',
         ], [
             'tipo.in' => 'El tipo debe ser corporacion, empresa o local.',
@@ -487,6 +628,8 @@ class ClienteController extends Controller
             $this->createChildCliente($child, $hijo);
         }
 
+        $this->ensureClientePortalUser($child->fresh());
+
         return $child;
     }
 
@@ -509,6 +652,7 @@ class ClienteController extends Controller
                     'parent_cliente_id' => $parent->id,
                 ]));
                 $this->syncClienteRelations($matchedChild, $childData);
+                $this->ensureClientePortalUser($matchedChild->fresh());
                 continue;
             }
 
@@ -586,6 +730,8 @@ class ClienteController extends Controller
             'nombre' => $this->emptyToNull($contacto['nombre'] ?? null),
             'celular' => $this->emptyToNull($contacto['celular'] ?? null),
             'email' => $this->emptyToNull($contacto['email'] ?? null),
+            'es_dueno' => (bool) ($contacto['es_dueno'] ?? false),
+            'es_vendedor' => (bool) ($contacto['es_vendedor'] ?? false),
         ];
     }
 
@@ -634,6 +780,50 @@ class ClienteController extends Controller
             'nombre' => $contacto['nombre'],
             'celular' => $contacto['celular'] ?? null,
             'email' => $contacto['email'] ?? null,
+            'es_dueno' => (bool) ($contacto['es_dueno'] ?? false),
+            'es_vendedor' => (bool) ($contacto['es_vendedor'] ?? false),
+        ]);
+    }
+
+    private function ensureClientePortalUser(?Cliente $cliente): void
+    {
+        if (!$cliente || empty($cliente->ruc) || $this->normalizeTipo($cliente->tipo) === 'local') {
+            return;
+        }
+
+        $tipoCliente = TiposUsuario::firstOrCreate(['nombre' => 'Cliente']);
+        $nombre = $cliente->razon_social ?: $cliente->nombre_comercial ?: $cliente->dueno_nombre ?: 'Cliente';
+
+        $usuario = Usuario::withTrashed()
+            ->where(function ($query) use ($cliente) {
+                $query->where('cliente_id', $cliente->id)
+                    ->orWhere('usuario', $cliente->ruc);
+            })
+            ->first();
+
+        if ($usuario) {
+            if (method_exists($usuario, 'trashed') && $usuario->trashed()) {
+                $usuario->restore();
+            }
+
+            $usuario->update([
+                'cliente_id' => $cliente->id,
+                'nombres' => $nombre,
+                'apellidos' => '',
+                'usuario' => $cliente->ruc,
+                'tipo_usuario_id' => $tipoCliente->id,
+            ]);
+
+            return;
+        }
+
+        Usuario::create([
+            'cliente_id' => $cliente->id,
+            'nombres' => $nombre,
+            'apellidos' => '',
+            'usuario' => $cliente->ruc,
+            'password' => Hash::make($cliente->ruc),
+            'tipo_usuario_id' => $tipoCliente->id,
         ]);
     }
 

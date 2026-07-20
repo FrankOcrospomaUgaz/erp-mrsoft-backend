@@ -2,7 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Resources\ComprobanteResource;
+use App\Models\Comprobante;
 use App\Models\Cuota;
+use App\Models\Cliente;
+use App\Services\Facturacion\ComprobanteService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
@@ -15,7 +19,11 @@ class CuotaController extends Controller
 
     public function index(Request $request)
     {
-        $query = Cuota::with(['contrato.cliente']);
+        $clienteIds = $this->accessibleClienteIds($request);
+        $query = Cuota::with(['contrato.cliente', 'pagos_cuota'])
+            ->when($clienteIds, function ($query) use ($clienteIds) {
+                $query->whereHas('contrato', fn ($contrato) => $contrato->whereIn('cliente_id', $clienteIds));
+            });
 
         // 🔎 Búsqueda global
         if ($request->filled('search')) {
@@ -97,6 +105,10 @@ class CuotaController extends Controller
             'pagos_cuota'
         ]);
 
+        if (!$this->canAccessCuota(request(), $cuota)) {
+            return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
+        }
+
         return response()->json([
             'status' => 200,
             'data' => new CuotaResource($cuota)
@@ -109,6 +121,10 @@ class CuotaController extends Controller
      */
     public function store(Request $request)
     {
+        if ($request->user()?->cliente_id) {
+            return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
+        }
+
         $validator = Validator::make($request->all(), [
             'contrato_id' => 'required|exists:contratos,id',
             'monto' => 'required|numeric',
@@ -152,6 +168,10 @@ class CuotaController extends Controller
      */
     public function update(Request $request, Cuota $cuota)
     {
+        if ($request->user()?->cliente_id) {
+            return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
+        }
+
         $validator = Validator::make($request->all(), [
             'contrato_id' => 'exists:contratos,id',
             'monto' => 'numeric',
@@ -195,6 +215,10 @@ class CuotaController extends Controller
      */
     public function destroy(Cuota $cuota)
     {
+        if (request()->user()?->cliente_id) {
+            return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
+        }
+
         try {
             $cuota->delete();
 
@@ -209,5 +233,72 @@ class CuotaController extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
+    }
+
+    public function reenviarFactura(Cuota $cuota, ComprobanteService $service)
+    {
+        if (request()->user()?->cliente_id) {
+            return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
+        }
+
+        $comprobante = Comprobante::where('cuota_id', $cuota->id)->latest()->first();
+
+        if (!$comprobante) {
+            return response()->json([
+                'status' => 404,
+                'message' => 'La cuota no tiene una factura asociada para reenviar.',
+            ], 404);
+        }
+
+        try {
+            $emitido = $service->emitir($comprobante);
+
+            return response()->json([
+                'status' => 200,
+                'message' => $emitido->estado === 'X'
+                    ? 'La factura se reenvio, pero SUNAT devolvio error.'
+                    : 'Factura reenviada correctamente.',
+                'data' => new ComprobanteResource($emitido),
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => 500,
+                'message' => 'Error al reenviar la factura.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    private function canAccessCuota(Request $request, Cuota $cuota): bool
+    {
+        $clienteIds = $this->accessibleClienteIds($request);
+
+        return !$clienteIds || in_array((int) $cuota->contrato?->cliente_id, $clienteIds, true);
+    }
+
+    private function accessibleClienteIds(Request $request): array
+    {
+        $clienteId = $request->user()?->cliente_id;
+
+        if (!$clienteId) {
+            return [];
+        }
+
+        $ids = [(int) $clienteId];
+        $pending = [(int) $clienteId];
+
+        while (!empty($pending)) {
+            $children = Cliente::query()
+                ->whereIn('parent_cliente_id', $pending)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+
+            $children = array_values(array_diff($children, $ids));
+            $ids = array_values(array_unique(array_merge($ids, $children)));
+            $pending = $children;
+        }
+
+        return $ids;
     }
 }

@@ -1,0 +1,158 @@
+* {
+    font-family: Verdana, sans-serif;
+}
+
+table {
+    font-size: small;
+    border-collapse: collapse;
+}
+
+tr {
+    page-break-inside: avoid;
+}
+
+thead tr td,
+thead tr th {
+    font-weight: bold;
+    font-size: 13px;
+}
+
+tbody tr td {
+    padding-left: 5px;
+    padding-right: 5px;
+    font-size: 13px;
+}
+
+tfoot tr td {
+    font-weight: bold;
+}
+
+.bold {
+    font-weight: bold;
+}
+
+.without-top {
+    margin-top: 0;
+}
+
+.without-bottom {
+    margin-bottom: 10px;
+    font-size: 13.2px;
+    margin-top: 15px;
+}
+
+.without-tb,
+.without-bt {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.xx-small {
+    font-size: xx-small;
+}
+
+.x-small {
+    font-size: x-small;
+}
+
+.small {
+    font-size: small;
+}
+
+.medium {
+    font-size: medium;
+}
+
+.large {
+    font-size: large;
+}
+
+.table-bordered {
+    border: 1px solid black;
+}
+
+.table-full-bordered tr td {
+    border: 1px solid black;
+}
+
+.gray {
+    background-color: lightgray
+}
+
+.teal {
+    background-color: #000000;
+}
+
+.bg-primary {
+    background-color: #000000;
+}
+
+.primary-text {
+    color: #000000;
+}
+
+.white-text {
+    color: white;
+}
+
+.page-break {
+    page-break-after: always;
+}
+
+header {
+    position: fixed;
+    top: -50px;
+    left: 0px;
+    right: 0px;
+    height: 50px;
+    text-align: center;
+    line-height: 35px;
+}
+
+header.left {
+    text-align: left !important;
+}
+
+header.right {
+    text-align: right !important;
+}
+
+footer {
+    position: fixed;
+    bottom: -50px;
+    left: 0px;
+    right: 0px;
+    height: 50px;
+    text-align: center;
+    line-height: 35px;
+}
+
+footer.left {
+    text-align: left !important;
+}
+
+footer.right {
+    text-align: right !important;
+}
+
+.table-soft-bordered {
+    border: 1px solid rgba(0, 0, 0, .48);
+}
+
+.table-full-soft-bordered thead tr td,
+.table-full-soft-bordered thead tr th {
+    padding-left: 12px;
+    padding-right: 12px;
+    border-left: 1px solid rgba(255, 255, 255, .24);
+    border-right: 1px solid rgba(255, 255, 255, .24);
+    border-bottom: 1px solid rgba(255, 255, 255, .24);
+}
+
+.table-full-soft-bordered tr td {
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+.table-full-soft-bordered tbody tr td {
+    border-bottom: 1px solid rgba(0, 0, 0, .24);
+}

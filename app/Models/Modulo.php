@@ -42,6 +42,7 @@ class Modulo extends Model
 
 	protected $fillable = [
 		'nombre',
+		'descripcion_contrato',
 		'precio_unitario',
 		'precio_mensual',
 		'precio_anual',

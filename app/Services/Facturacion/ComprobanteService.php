@@ -142,6 +142,7 @@ class ComprobanteService
         }
 
         return Facturador::create([
+            'empresa_id' => config('facturacion.empresa_id'),
             'ruc' => config('facturacion.ruc'),
             'razon_social' => config('facturacion.razon_social'),
             'nombre_comercial' => config('facturacion.nombre_comercial'),
@@ -164,7 +165,8 @@ class ComprobanteService
         $ultimo = Comprobante::where('tipo_documento', $tipoDocumento)
             ->where('serie', $serie)
             ->lockForUpdate()
-            ->max('correlativo');
+            ->orderByDesc('correlativo')
+            ->value('correlativo');
 
         return ((int) $ultimo) + 1;
     }
@@ -241,6 +243,7 @@ class ComprobanteService
         $contacto = $cliente->contactos_clientes->first();
 
         return [
+            'empresa_id' => $facturador->empresa_id,
             'tipo_documento' => $comprobante->tipo_documento,
             'serie' => $comprobante->serie,
             'correlativo' => $comprobante->correlativo,

@@ -14,11 +14,11 @@ class SunatClient
             return $this->simularRespuesta($comprobante);
         }
 
-        if (!$facturador->usuario_sol || !$facturador->clave_sol || !$facturador->token) {
+        if (!$facturador->empresa_id || !$facturador->usuario_sol || !$facturador->clave_sol || !$facturador->token) {
             return [
                 'ok' => false,
                 'code' => 'CONFIG',
-                'mensaje' => 'Facturador en produccion sin credenciales completas.',
+                'mensaje' => 'Facturador en produccion sin ID de empresa o credenciales completas.',
             ];
         }
 

@@ -17,6 +17,10 @@ class ContratoController extends Controller
 {
     public function siguienteNumero()
     {
+        if (request()->user()?->cliente_id) {
+            return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
+        }
+
         $year = now()->year;
         $pattern = '/^CT-' . $year . '-(\d+)$/';
 
@@ -40,12 +44,13 @@ class ContratoController extends Controller
 
     public function index(Request $request)
     {
+        $clienteIds = $this->accessibleClienteIds($request);
         $query = Contrato::with([
             'cliente',
             'cuotas',
             'contratoProductoModulos.modulo',
             'contratoProductoModulos.producto',
-        ]);
+        ])->when($clienteIds, fn ($query) => $query->whereIn('cliente_id', $clienteIds));
 
         if ($request->filled('search')) {
             $search = $request->get('search');
@@ -85,7 +90,7 @@ class ContratoController extends Controller
         ]);
     }
 
-    public function show($id)
+    public function show(Request $request, $id)
     {
         $contrato = Contrato::with([
             'cliente',
@@ -101,13 +106,17 @@ class ContratoController extends Controller
             ], 404);
         }
 
+        if (!$this->canAccessContrato($request, $contrato)) {
+            return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
+        }
+
         return response()->json([
             'status' => 200,
             'data' => $contrato,
         ], 200);
     }
 
-    public function pdf($id)
+    public function pdf(Request $request, $id)
     {
         $contrato = Contrato::with([
             'cliente.parent_cliente.parent_cliente',
@@ -121,6 +130,10 @@ class ContratoController extends Controller
                 'status' => 404,
                 'message' => 'Contrato no encontrado',
             ], 404);
+        }
+
+        if (!$this->canAccessContrato($request, $contrato)) {
+            return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
         }
 
         $cliente = $contrato->cliente;
@@ -166,6 +179,10 @@ class ContratoController extends Controller
 
     public function store(Request $request)
     {
+        if ($request->user()?->cliente_id) {
+            return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
+        }
+
         $validator = Validator::make($request->all(), $this->contractRules(), $this->contractMessages());
         $this->appendContractValidation($validator, $request);
 
@@ -217,6 +234,10 @@ class ContratoController extends Controller
 
     public function update(Request $request, $id)
     {
+        if ($request->user()?->cliente_id) {
+            return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
+        }
+
         $contrato = Contrato::find($id);
 
         if (!$contrato) {
@@ -287,6 +308,10 @@ class ContratoController extends Controller
 
     public function destroy(Request $request, $id)
     {
+        if ($request->user()?->cliente_id) {
+            return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
+        }
+
         $contrato = Contrato::find($id);
 
         if (!$contrato) {
@@ -595,5 +620,38 @@ class ContratoController extends Controller
         $prefijo = $millones === 1 ? 'un millon' : $this->numberToSpanish($millones) . ' millones';
 
         return $resto === 0 ? $prefijo : $prefijo . ' ' . $this->numberToSpanish($resto);
+    }
+
+    private function canAccessContrato(Request $request, Contrato $contrato): bool
+    {
+        $clienteIds = $this->accessibleClienteIds($request);
+
+        return !$clienteIds || in_array((int) $contrato->cliente_id, $clienteIds, true);
+    }
+
+    private function accessibleClienteIds(Request $request): array
+    {
+        $clienteId = $request->user()?->cliente_id;
+
+        if (!$clienteId) {
+            return [];
+        }
+
+        $ids = [(int) $clienteId];
+        $pending = [(int) $clienteId];
+
+        while (!empty($pending)) {
+            $children = Cliente::query()
+                ->whereIn('parent_cliente_id', $pending)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+
+            $children = array_values(array_diff($children, $ids));
+            $ids = array_values(array_unique(array_merge($ids, $children)));
+            $pending = $children;
+        }
+
+        return $ids;
     }
 }

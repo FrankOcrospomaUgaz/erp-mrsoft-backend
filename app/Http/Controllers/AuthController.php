@@ -20,7 +20,7 @@ class AuthController extends Controller
             'password' => 'required|string',
         ]);
 
-        $usuario = Usuario::where('usuario', $request->usuario)->first();
+        $usuario = Usuario::with(['tipos_usuario', 'cliente'])->where('usuario', $request->usuario)->first();
 
         if (!$usuario || !Hash::check($request->password, $usuario->password)) {
             return response()->json(['message' => 'Credenciales inválidas'], 401);
@@ -110,6 +110,8 @@ class AuthController extends Controller
         if ($user) {
             // Recupera el token enviado
             $token = $request->bearerToken();
+
+            $user->load(['tipos_usuario', 'cliente']);
 
             return response()->json([
                 'access_token' => $token,
