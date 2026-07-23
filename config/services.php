@@ -39,4 +39,12 @@ return [
         'timeout' => env('RUC_LOOKUP_TIMEOUT', 10),
     ],
 
+    'whatsapp' => [
+        'token' => env('META_AUTH_TOKEN'),
+        'phone_number_id' => env('META_WHATSAPP_PHONE_NUMBER_ID', '202127742990342'),
+        'version' => env('META_WHATSAPP_API_VERSION', 'v19.0'),
+        'base_url' => env('META_WHATSAPP_API_BASE', 'https://graph.facebook.com'),
+        'template_name' => env('META_WHATSAPP_TEMPLATE', 'hotelhub_pdf_invoice'),
+    ],
+
 ];

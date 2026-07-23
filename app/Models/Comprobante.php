@@ -39,12 +39,17 @@ class Comprobante extends Model
         'error_text',
         'fecha_envio',
         'fecha_respuesta',
+        'estado_envio_cliente',
+        'fecha_envio_cliente',
+        'celular_envio_cliente',
+        'error_envio_cliente',
     ];
 
     protected $casts = [
         'fecha_emision' => 'date:Y-m-d',
         'fecha_envio' => 'datetime',
         'fecha_respuesta' => 'datetime',
+        'fecha_envio_cliente' => 'datetime',
         'subtotal' => 'decimal:2',
         'igv' => 'decimal:2',
         'total' => 'decimal:2',

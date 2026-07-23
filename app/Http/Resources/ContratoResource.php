@@ -23,6 +23,8 @@ class ContratoResource extends JsonResource
             'periodicidad_cuota' => $this->periodicidad_cuota,
             'motivo_anulacion' => $this->motivo_anulacion,
             'fecha_anulacion' => $this->fecha_anulacion,
+            'firma_arrendador' => $this->firma_arrendador,
+            'firma_cliente' => $this->firma_cliente,
 
             'cliente' => $this->whenLoaded('cliente', fn () => $this->cliente),
             'cuotas'  => $this->whenLoaded('cuotas', fn () => $this->cuotas),

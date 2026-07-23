@@ -38,6 +38,11 @@ class ComprobanteResource extends JsonResource
             'error_text' => $this->error_text,
             'fecha_envio' => $this->fecha_envio,
             'fecha_respuesta' => $this->fecha_respuesta,
+            'estado_envio_cliente' => $this->estado_envio_cliente ?? 'pendiente',
+            'estado_envio_cliente_label' => $this->estadoEnvioClienteLabel(),
+            'fecha_envio_cliente' => $this->fecha_envio_cliente,
+            'celular_envio_cliente' => $this->celular_envio_cliente,
+            'error_envio_cliente' => $this->error_envio_cliente,
             'detalles' => ComprobanteDetalleResource::collection($this->whenLoaded('detalles')),
             'created_at' => $this->created_at,
         ];
@@ -53,6 +58,15 @@ class ComprobanteResource extends JsonResource
             'U' => 'Baja aceptada',
             'X' => 'Error',
             default => 'Desconocido',
+        };
+    }
+
+    private function estadoEnvioClienteLabel(): string
+    {
+        return match ($this->estado_envio_cliente) {
+            'enviado' => 'Notificado por WhatsApp',
+            'error' => 'Fallo en notificación',
+            default => 'Pendiente de notificación',
         };
     }
 }

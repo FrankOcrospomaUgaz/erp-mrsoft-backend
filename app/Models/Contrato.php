@@ -22,6 +22,8 @@ class Contrato extends Model
         'periodicidad_cuota',
         'motivo_anulacion',
         'fecha_anulacion',
+        'firma_arrendador',
+        'firma_cliente',
     ];
 
     protected $casts = [

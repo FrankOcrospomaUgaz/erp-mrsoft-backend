@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 
+use App\Services\WhatsAppService;
+
 class ComprobanteController extends Controller
 {
     public function __construct(private readonly ComprobanteService $service)
@@ -200,6 +202,16 @@ class ComprobanteController extends Controller
             return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
         }
 
+        $pdfContent = $this->generarPdfBinary($comprobante);
+
+        return response($pdfContent, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="comprobante-' . $comprobante->serie . '-' . $comprobante->correlativo . '.pdf"',
+        ]);
+    }
+
+    public function generarPdfBinary(Comprobante $comprobante): string
+    {
         $facturador = $comprobante->facturador
             ?? Facturador::where('activo', true)->latest()->first()
             ?? Facturador::latest()->first();
@@ -225,9 +237,173 @@ class ComprobanteController extends Controller
             'formaPago' => $comprobante->forma_pago === 'D' ? 'CREDITO' : 'CONTADO',
         ])->setPaper('a4');
 
-        return response($pdf->output(), 200, [
-            'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="comprobante-' . $comprobante->serie . '-' . $comprobante->correlativo . '.pdf"',
+        return $pdf->output();
+    }
+
+    public function enviarWhatsApp(Request $request, $id, WhatsAppService $whatsAppService)
+    {
+        $comprobante = Comprobante::with(['cliente.contactos_clientes', 'facturador'])->find($id);
+
+        if (!$comprobante) {
+            return response()->json(['status' => 404, 'message' => 'Comprobante no encontrado'], 404);
+        }
+
+        if (!$this->canAccessComprobante($request, $comprobante)) {
+            return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
+        }
+
+        $celular = $request->get('celular');
+        if (empty($celular)) {
+            $contacto = $comprobante->cliente?->contactos_clientes?->first();
+            $celular = $contacto?->telefono ?? $contacto?->celular ?? $comprobante->cliente?->telefono ?? null;
+        }
+
+        if (empty($celular)) {
+            return response()->json([
+                'status' => 422,
+                'message' => 'El cliente no tiene un número de celular registrado.',
+            ], 422);
+        }
+
+        try {
+            $pdfBinary = $this->generarPdfBinary($comprobante);
+            $resultado = $whatsAppService->enviarComprobante($comprobante, $pdfBinary, $celular);
+
+            if ($resultado['success']) {
+                $comprobante->update([
+                    'estado_envio_cliente' => 'enviado',
+                    'fecha_envio_cliente' => now(),
+                    'celular_envio_cliente' => $celular,
+                    'error_envio_cliente' => null,
+                ]);
+
+                return response()->json([
+                    'status' => 200,
+                    'message' => 'Comprobante enviado exitosamente por WhatsApp.',
+                    'data' => new ComprobanteResource($comprobante->fresh()),
+                ]);
+            } else {
+                $comprobante->update([
+                    'estado_envio_cliente' => 'error',
+                    'error_envio_cliente' => $resultado['error'] ?? 'Error al enviar por WhatsApp',
+                ]);
+
+                return response()->json([
+                    'status' => 400,
+                    'message' => $resultado['error'] ?? 'No se pudo enviar el mensaje por WhatsApp.',
+                    'data' => new ComprobanteResource($comprobante->fresh()),
+                ], 400);
+            }
+        } catch (\Throwable $e) {
+            $comprobante->update([
+                'estado_envio_cliente' => 'error',
+                'error_envio_cliente' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'status' => 500,
+                'message' => 'Error al procesar el envío por WhatsApp: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function envioMasivoWhatsApp(Request $request, WhatsAppService $whatsAppService)
+    {
+        $this->denyCliente($request);
+
+        $comprobantes = Comprobante::with(['cliente.contactos_clientes', 'facturador'])
+            ->where(function ($q) {
+                $q->whereNull('estado_envio_cliente')
+                  ->orWhereIn('estado_envio_cliente', ['pendiente', 'error']);
+            })
+            ->whereNull('deleted_at')
+            ->get();
+
+        if ($comprobantes->isEmpty()) {
+            return response()->json([
+                'status' => 200,
+                'message' => 'No hay comprobantes pendientes de notificación.',
+                'data' => ['totales' => 0, 'enviados' => 0, 'fallidos' => 0],
+            ]);
+        }
+
+        $enviados = 0;
+        $fallidos = 0;
+        $detalles = [];
+
+        foreach ($comprobantes as $comprobante) {
+            $contacto = $comprobante->cliente?->contactos_clientes?->first();
+            $celular = $contacto?->telefono ?? $contacto?->celular ?? $comprobante->cliente?->telefono ?? null;
+
+            if (empty($celular)) {
+                $comprobante->update([
+                    'estado_envio_cliente' => 'error',
+                    'error_envio_cliente' => 'Cliente sin número telefónico registrado.',
+                ]);
+                $fallidos++;
+                $detalles[] = [
+                    'id' => $comprobante->id,
+                    'numero' => $comprobante->serie . '-' . $comprobante->correlativo,
+                    'estado' => 'error',
+                    'motivo' => 'Sin número telefónico',
+                ];
+                continue;
+            }
+
+            try {
+                $pdfBinary = $this->generarPdfBinary($comprobante);
+                $resultado = $whatsAppService->enviarComprobante($comprobante, $pdfBinary, $celular);
+
+                if ($resultado['success']) {
+                    $comprobante->update([
+                        'estado_envio_cliente' => 'enviado',
+                        'fecha_envio_cliente' => now(),
+                        'celular_envio_cliente' => $celular,
+                        'error_envio_cliente' => null,
+                    ]);
+                    $enviados++;
+                    $detalles[] = [
+                        'id' => $comprobante->id,
+                        'numero' => $comprobante->serie . '-' . $comprobante->correlativo,
+                        'estado' => 'enviado',
+                    ];
+                } else {
+                    $comprobante->update([
+                        'estado_envio_cliente' => 'error',
+                        'error_envio_cliente' => $resultado['error'] ?? 'Fallo envío WhatsApp',
+                    ]);
+                    $fallidos++;
+                    $detalles[] = [
+                        'id' => $comprobante->id,
+                        'numero' => $comprobante->serie . '-' . $comprobante->correlativo,
+                        'estado' => 'error',
+                        'motivo' => $resultado['error'] ?? 'Fallo envío',
+                    ];
+                }
+            } catch (\Throwable $e) {
+                $comprobante->update([
+                    'estado_envio_cliente' => 'error',
+                    'error_envio_cliente' => $e->getMessage(),
+                ]);
+                $fallidos++;
+                $detalles[] = [
+                    'id' => $comprobante->id,
+                    'numero' => $comprobante->serie . '-' . $comprobante->correlativo,
+                    'estado' => 'error',
+                    'motivo' => $e->getMessage(),
+                ];
+            }
+        }
+
+        return response()->json([
+            'status' => 200,
+            'message' => "Envío masivo por WhatsApp completado. Enviados: {$enviados}, Fallidos: {$fallidos}.",
+            'data' => [
+                'totales' => count($comprobantes),
+                'enviados' => $enviados,
+                'fallidos' => $fallidos,
+                'detalles' => $detalles,
+            ],
         ]);
     }
 

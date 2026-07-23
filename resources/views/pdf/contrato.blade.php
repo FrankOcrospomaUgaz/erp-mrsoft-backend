@@ -306,12 +306,22 @@ Cuenta CCI en soles
         <div class="signature-space"></div>
         <table class="signature-table">
             <tr>
-                <td>
+                <td style="vertical-align: bottom; text-align: center;">
+                    @if(!empty($firmaArrendador))
+                        <div style="margin-bottom: -15px;">
+                            <img src="{{ $firmaArrendador }}" style="max-height: 85px; max-width: 220px; object-fit: contain;" alt="Firma Arrendador" />
+                        </div>
+                    @endif
                     <div class="signature-line">
                         <strong>EL ARRENDADOR</strong>
                     </div>
                 </td>
-                <td>
+                <td style="vertical-align: bottom; text-align: center;">
+                    @if(!empty($firmaCliente))
+                        <div style="margin-bottom: -15px;">
+                            <img src="{{ $firmaCliente }}" style="max-height: 85px; max-width: 220px; object-fit: contain;" alt="Firma Cliente" />
+                        </div>
+                    @endif
                     <div class="signature-line">
                         <strong>EL CLIENTE</strong>
                     </div>

@@ -26,6 +26,7 @@ class Facturador extends Model
         'wsdl_bajas',
         'modo',
         'porcentaje_igv',
+        'firma_arrendador_default',
         'activo',
     ];
 

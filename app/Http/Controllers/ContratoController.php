@@ -150,6 +150,9 @@ class ContratoController extends Controller
             })
             ->values();
 
+        $firmaArrendador = $contrato->firma_arrendador ?? $facturador?->firma_arrendador_default ?? null;
+        $firmaCliente = $contrato->firma_cliente ?? null;
+
         $data = [
             'contrato' => $contrato,
             'cliente' => $cliente,
@@ -165,6 +168,8 @@ class ContratoController extends Controller
             'montoTotalLetras' => $this->amountToWords((float) $contrato->total),
             'fechaInicioTexto' => $this->formatDateLong($contrato->fecha_inicio),
             'fechaFinTexto' => $this->formatDateLong($contrato->fecha_fin),
+            'firmaArrendador' => $firmaArrendador,
+            'firmaCliente' => $firmaCliente,
         ];
 
         $pdf = Pdf::loadView('pdf.contrato', $data)
@@ -174,6 +179,47 @@ class ContratoController extends Controller
         return response($pdf->output(), 200, [
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => 'inline; filename="contrato-' . $contrato->numero . '.pdf"',
+        ]);
+    }
+
+    public function guardarFirmas(Request $request, $id)
+    {
+        if ($request->user()?->cliente_id) {
+            return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
+        }
+
+        $contrato = Contrato::findOrFail($id);
+
+        $validator = Validator::make($request->all(), [
+            'firma_arrendador' => 'nullable|string',
+            'firma_cliente' => 'nullable|string',
+            'guardar_como_default_arrendador' => 'nullable|boolean',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => 422, 'errors' => $validator->errors()], 422);
+        }
+
+        $validated = $validator->validated();
+
+        $contrato->update([
+            'firma_arrendador' => array_key_exists('firma_arrendador', $validated) ? $validated['firma_arrendador'] : $contrato->firma_arrendador,
+            'firma_cliente' => array_key_exists('firma_cliente', $validated) ? $validated['firma_cliente'] : $contrato->firma_cliente,
+        ]);
+
+        if (!empty($validated['guardar_como_default_arrendador']) && !empty($validated['firma_arrendador'])) {
+            $facturador = Facturador::where('activo', true)->latest()->first() ?? Facturador::latest()->first();
+            if ($facturador) {
+                $facturador->update([
+                    'firma_arrendador_default' => $validated['firma_arrendador'],
+                ]);
+            }
+        }
+
+        return response()->json([
+            'status' => 200,
+            'message' => 'Firmas registradas correctamente.',
+            'data' => new ContratoResource($contrato->fresh()),
         ]);
     }
 

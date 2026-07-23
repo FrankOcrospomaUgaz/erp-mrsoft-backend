@@ -39,6 +39,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::apiResource('producto-modulos', App\Http\Controllers\ProductoModuloController::class);
         Route::post('comprobantes/emision-masiva', [App\Http\Controllers\ComprobanteController::class, 'emisionMasiva']);
         Route::post('comprobantes/reenviar-pendientes', [App\Http\Controllers\ComprobanteController::class, 'reenviarPendientes']);
+        Route::post('comprobantes/envio-masivo-whatsapp', [App\Http\Controllers\ComprobanteController::class, 'envioMasivoWhatsApp']);
+        Route::post('comprobantes/{id}/enviar-whatsapp', [App\Http\Controllers\ComprobanteController::class, 'enviarWhatsApp']);
         Route::post('comprobantes/{id}/emitir', [App\Http\Controllers\ComprobanteController::class, 'emitir']);
         Route::apiResource('comprobantes', App\Http\Controllers\ComprobanteController::class)->only(['store']);
         Route::get('facturadores/activo', [App\Http\Controllers\FacturadorController::class, 'activo']);
@@ -52,6 +54,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('clientes/{id}/sucursales', [App\Http\Controllers\ClienteController::class, 'sucursalesPorCliente']);
         Route::apiResource('pagos', App\Http\Controllers\PagoCuotumController::class);
         Route::get('contratos/siguiente-numero', [App\Http\Controllers\ContratoController::class, 'siguienteNumero']);
+        Route::post('contratos/{id}/firmas', [App\Http\Controllers\ContratoController::class, 'guardarFirmas']);
         Route::apiResource('contratos', App\Http\Controllers\ContratoController::class)->only(['store', 'update', 'destroy']);
         Route::post('cuotas/{cuota}/reenviar-factura', [App\Http\Controllers\CuotaController::class, 'reenviarFactura']);
         Route::apiResource('cuotas', App\Http\Controllers\CuotaController::class)->only(['store', 'update', 'destroy']);
