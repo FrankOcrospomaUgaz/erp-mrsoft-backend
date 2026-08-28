@@ -263,8 +263,12 @@
     $nombreProducto = strtoupper($producto->nombre);
     $clienteRazonSocial = $cliente->razon_social ?? $cliente->nombre_comercial ?? ($datosCliente['razon_social'] ?? 'EMPRESA CLIENTE');
     $clienteRuc = $cliente->ruc ?? ($datosCliente['ruc'] ?? '20601799317');
+    $htmlContent = $formato['html_content'] ?? null;
 @endphp
 
+@if(!empty($htmlContent))
+    {!! $htmlContent !!}
+@else
 <!-- PÁGINA 1: PORTADA -->
 <div class="cover-page">
     <div class="cover-logo-box">
@@ -648,6 +652,7 @@
         <div class="page-break"></div>
     @endif
 @endforeach
+@endif
 
 </body>
 </html>
