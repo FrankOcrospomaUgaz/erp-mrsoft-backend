@@ -38,17 +38,17 @@ class ContratoResource extends JsonResource
                         'modulo_id'   => $cpm->modulo_id,
 
                         // Datos del producto (si lo cargaste)
-                        'producto' => $cpm->relationLoaded('producto') ? [
+                        'producto' => ($cpm->relationLoaded('producto') && $cpm->producto) ? [
                             'id'     => $cpm->producto->id,
                             'nombre' => $cpm->producto->nombre ?? null,
                         ] : null,
 
                         // Datos del módulo (lo que te piden)
-                        'modulo' => $cpm->relationLoaded('modulo') ? [
+                        'modulo' => ($cpm->relationLoaded('modulo') && $cpm->modulo) ? [
                             'id'              => $cpm->modulo->id,
-                            'nombre'          => $cpm->modulo->nombre,
-                            'precio_unitario' => $cpm->modulo->precio_unitario,
-                            'producto_id'     => $cpm->modulo->producto_id,
+                            'nombre'          => $cpm->modulo->nombre ?? null,
+                            'precio_unitario' => $cpm->modulo->precio_unitario ?? null,
+                            'producto_id'     => $cpm->modulo->producto_id ?? null,
                         ] : null,
                     ];
                 });

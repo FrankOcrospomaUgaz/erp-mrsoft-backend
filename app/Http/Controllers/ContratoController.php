@@ -15,13 +15,9 @@ use Illuminate\Validation\Rule;
 
 class ContratoController extends Controller
 {
-    public function siguienteNumero()
+    public function generarSiguienteNumero(?int $year = null): string
     {
-        if (request()->user()?->cliente_id) {
-            return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
-        }
-
-        $year = now()->year;
+        $year = $year ?: now()->year;
         $pattern = '/^CT-' . $year . '-(\d+)$/';
 
         $lastSequence = Contrato::withTrashed()
@@ -34,10 +30,28 @@ class ContratoController extends Controller
                 return max($carry, (int) $matches[1]);
             }, 0);
 
+        return sprintf('CT-%s-%03d', $year, $lastSequence + 1);
+    }
+
+    public function siguienteNumero(Request $request)
+    {
+        if ($request->user()?->cliente_id) {
+            return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
+        }
+
+        $year = $request->input('year') ? (int) $request->input('year') : null;
+        if (!$year && $request->filled('fecha_inicio')) {
+            try {
+                $year = Carbon::parse($request->input('fecha_inicio'))->year;
+            } catch (\Throwable) {
+                $year = null;
+            }
+        }
+
         return response()->json([
             'status' => 200,
             'data' => [
-                'numero' => sprintf('CT-%s-%03d', $year, $lastSequence + 1),
+                'numero' => $this->generarSiguienteNumero($year),
             ],
         ]);
     }
@@ -227,6 +241,18 @@ class ContratoController extends Controller
     {
         if ($request->user()?->cliente_id) {
             return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
+        }
+
+        if (!$request->filled('numero')) {
+            $year = null;
+            if ($request->filled('fecha_inicio')) {
+                try {
+                    $year = Carbon::parse($request->input('fecha_inicio'))->year;
+                } catch (\Throwable) {
+                    $year = null;
+                }
+            }
+            $request->merge(['numero' => $this->generarSiguienteNumero($year)]);
         }
 
         $validator = Validator::make($request->all(), $this->contractRules(), $this->contractMessages());
