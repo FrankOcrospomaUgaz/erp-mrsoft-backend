@@ -25,8 +25,9 @@ class ContratoResource extends JsonResource
             'fecha_anulacion' => $this->fecha_anulacion,
             'firma_arrendador' => $this->firma_arrendador,
             'firma_cliente' => $this->firma_cliente,
-            'created_at'   => $this->created_at?->toIso8601String() ?? $this->created_at,
-            'updated_at'   => $this->updated_at?->toIso8601String() ?? $this->updated_at,
+            'created_at'   => $this->created_at ? $this->created_at->toIso8601String() : null,
+            'fecha_creacion' => $this->created_at ? $this->created_at->format('Y-m-d H:i:s') : null,
+            'updated_at'   => $this->updated_at ? $this->updated_at->toIso8601String() : null,
 
             'cliente' => $this->whenLoaded('cliente', fn () => $this->cliente),
             'cuotas'  => $this->whenLoaded('cuotas', fn () => $this->cuotas),
