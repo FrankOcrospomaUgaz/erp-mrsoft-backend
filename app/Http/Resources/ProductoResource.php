@@ -27,6 +27,7 @@ class ProductoResource extends JsonResource
                 'deleted_at' => $modulo->deleted_at,
                 'contratos' => $modulo->contratos ?? [],
             ]),
+            'formato_alta' => $this->formato_alta,
             'avisos_saas' => $this->avisos_saas,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,

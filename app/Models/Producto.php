@@ -36,7 +36,12 @@ class Producto extends Model
 	protected $fillable = [
 		'nombre',
 		'tipo',
-		'descripcion'
+		'descripcion',
+		'formato_alta',
+	];
+
+	protected $casts = [
+		'formato_alta' => 'array',
 	];
 
 public function modulos()

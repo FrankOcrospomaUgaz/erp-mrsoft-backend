@@ -35,7 +35,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::apiResource('tipo-usuarios', App\Http\Controllers\TipoUsuarioController::class);
         Route::apiResource('tipos-local', App\Http\Controllers\TipoLocalController::class);
         Route::apiResource('usuarios', App\Http\Controllers\UsuarioController::class);
-        Route::apiResource('notificaciones', App\Http\Controllers\NotificacionesController::class);
+        Route::get('productos/{id}/formato-alta/pdf', [App\Http\Controllers\ProductoController::class, 'pdfFormatoAlta']);
+        Route::get('productos/{id}/formato-alta', [App\Http\Controllers\ProductoController::class, 'getFormatoAlta']);
+        Route::put('productos/{id}/formato-alta', [App\Http\Controllers\ProductoController::class, 'updateFormatoAlta']);
         Route::apiResource('productos', App\Http\Controllers\ProductoController::class);
         Route::apiResource('producto-modulos', App\Http\Controllers\ProductoModuloController::class);
         Route::post('comprobantes/emision-masiva', [App\Http\Controllers\ComprobanteController::class, 'emisionMasiva']);
