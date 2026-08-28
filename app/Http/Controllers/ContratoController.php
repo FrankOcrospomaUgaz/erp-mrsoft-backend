@@ -82,7 +82,47 @@ class ContratoController extends Controller
             });
         }
 
-        $contratos = $query->paginate($request->get('per_page', 5));
+        if ($request->filled('numero')) {
+            $numero = $request->get('numero');
+            $query->where('numero', 'ILIKE', "%{$numero}%");
+        }
+
+        if ($request->filled('cliente_id')) {
+            $filterClienteId = (int) $request->get('cliente_id');
+            $targetClienteIds = $this->getAllSubClientIds($filterClienteId);
+            $query->whereIn('cliente_id', $targetClienteIds);
+        }
+
+        if ($request->filled('created_from')) {
+            $query->whereDate('created_at', '>=', $request->get('created_from'));
+        }
+
+        if ($request->filled('created_to')) {
+            $query->whereDate('created_at', '<=', $request->get('created_to'));
+        }
+
+        if ($request->filled('vigencia_from')) {
+            $query->where('fecha_fin', '>=', $request->get('vigencia_from'));
+        }
+
+        if ($request->filled('vigencia_to')) {
+            $query->where('fecha_inicio', '<=', $request->get('vigencia_to'));
+        }
+
+        if ($request->filled('producto_id')) {
+            $productoId = (int) $request->get('producto_id');
+            $query->whereHas('contratoProductoModulos', function ($q) use ($productoId) {
+                $q->where('producto_id', $productoId);
+            });
+        }
+
+        if ($request->filled('estado')) {
+            $query->where('estado', $request->get('estado'));
+        }
+
+        $query->orderBy('id', 'desc');
+
+        $contratos = $query->paginate($request->get('per_page', 10));
 
         return response()->json([
             'data' => ContratoResource::collection($contratos->items()),
@@ -711,6 +751,26 @@ class ContratoController extends Controller
 
         $ids = [(int) $clienteId];
         $pending = [(int) $clienteId];
+
+        while (!empty($pending)) {
+            $children = Cliente::query()
+                ->whereIn('parent_cliente_id', $pending)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+
+            $children = array_values(array_diff($children, $ids));
+            $ids = array_values(array_unique(array_merge($ids, $children)));
+            $pending = $children;
+        }
+
+        return $ids;
+    }
+
+    private function getAllSubClientIds(int $clienteId): array
+    {
+        $ids = [$clienteId];
+        $pending = [$clienteId];
 
         while (!empty($pending)) {
             $children = Cliente::query()
