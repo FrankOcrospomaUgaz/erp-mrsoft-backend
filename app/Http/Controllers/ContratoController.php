@@ -166,7 +166,7 @@ class ContratoController extends Controller
 
         return response()->json([
             'status' => 200,
-            'data' => $contrato,
+            'data' => new ContratoResource($contrato),
         ], 200);
     }
 
