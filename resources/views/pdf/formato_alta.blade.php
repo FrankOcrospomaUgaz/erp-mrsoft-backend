@@ -19,7 +19,6 @@
         }
         html, body {
             width: 100%;
-            height: 100%;
             margin: 0;
             padding: 0;
             font-family: Helvetica, Arial, sans-serif;
@@ -28,16 +27,14 @@
         }
         .a4-page-sheet {
             width: 100%;
-            height: 100%;
+            min-height: 1050px;
             position: relative;
             background: #ffffff;
             box-sizing: border-box;
-            page-break-after: always;
             page-break-inside: avoid;
-            overflow: hidden;
         }
-        .a4-page-sheet:last-child {
-            page-break-after: avoid;
+        .a4-page-sheet + .a4-page-sheet {
+            page-break-before: always;
         }
         h1, h2, h3 {
             color: #eb5454;
