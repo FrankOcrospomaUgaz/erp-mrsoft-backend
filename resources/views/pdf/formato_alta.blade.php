@@ -1,3 +1,90 @@
+@php
+    $formato = $producto->formato_alta ?? [];
+    $htmlContent = $formato['html_content'] ?? null;
+@endphp
+
+@if(!empty($htmlContent))
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Formato de Alta - {{ $producto->nombre }}</title>
+    <style>
+        @page {
+            size: A4 portrait;
+            margin: 0;
+        }
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, Helvetica, sans-serif;
+            color: #111827;
+            background: #ffffff;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+        .a4-page-sheet {
+            width: 794px;
+            height: 1123px;
+            position: relative;
+            background: #ffffff;
+            box-sizing: border-box;
+            page-break-after: always;
+            page-break-inside: avoid;
+            overflow: hidden;
+        }
+        .a4-page-sheet:last-child {
+            page-break-after: avoid;
+        }
+        h1, h2, h3 {
+            color: #eb5454;
+            font-family: Arial, Helvetica, sans-serif;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        h1 { font-size: 18px; margin: 18px 0 10px 0; }
+        h2 { font-size: 15px; margin: 16px 0 8px 0; }
+        h3 { font-size: 13px; margin: 12px 0 6px 0; }
+        p {
+            margin: 0 0 8px 0;
+            line-height: 1.55;
+            font-size: 12px;
+        }
+        ul {
+            list-style-type: disc !important;
+            margin: 8px 0 14px 24px !important;
+            padding-left: 10px !important;
+        }
+        li {
+            display: list-item !important;
+            list-style-type: disc !important;
+            margin: 4px 0 !important;
+            font-size: 12px !important;
+            line-height: 1.55 !important;
+        }
+        table {
+            border-collapse: collapse;
+        }
+        td[style*="#eb5454"],
+        td[style*="235, 84, 84"],
+        th {
+            color: #ffffff !important;
+        }
+        td[style*="#eb5454"] *,
+        td[style*="235, 84, 84"] *,
+        th * {
+            color: #ffffff !important;
+        }
+    </style>
+</head>
+<body>
+    {!! $htmlContent !!}
+</body>
+</html>
+@else
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -266,9 +353,6 @@
     $htmlContent = $formato['html_content'] ?? null;
 @endphp
 
-@if(!empty($htmlContent))
-    {!! $htmlContent !!}
-@else
 <!-- PÁGINA 1: PORTADA -->
 <div class="cover-page">
     <div class="cover-logo-box">
