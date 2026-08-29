@@ -310,8 +310,11 @@ class ProductoController extends Controller
         ];
 
         $pdf = Pdf::loadView('pdf.formato_alta', $data)
-            ->setPaper('a4')
-            ->setOption('isRemoteEnabled', true);
+            ->setPaper('a4', 'portrait')
+            ->setOption('isRemoteEnabled', true)
+            ->setOption('isHtml5ParserEnabled', true)
+            ->setOption('dpi', 72)
+            ->setOption('defaultFont', 'Helvetica');
 
         $safeName = preg_replace('/[^A-Za-z0-9_-]/', '', strtolower($producto->nombre));
 

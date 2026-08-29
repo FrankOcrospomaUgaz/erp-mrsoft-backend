@@ -11,7 +11,7 @@
     <title>Formato de Alta - {{ $producto->nombre }}</title>
     <style>
         @page {
-            size: A4 portrait;
+            size: 595.28pt 841.89pt;
             margin: 0;
         }
         * {
@@ -20,15 +20,17 @@
         body {
             margin: 0;
             padding: 0;
-            font-family: Arial, Helvetica, sans-serif;
+            font-family: Helvetica, Arial, sans-serif;
             color: #111827;
             background: #ffffff;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
         }
         .a4-page-sheet {
-            width: 794px;
-            height: 1123px;
+            width: 595.28pt;
+            height: 841.89pt;
+            max-width: 595.28pt;
+            max-height: 841.89pt;
             position: relative;
             background: #ffffff;
             box-sizing: border-box;
@@ -41,13 +43,13 @@
         }
         h1, h2, h3 {
             color: #eb5454;
-            font-family: Arial, Helvetica, sans-serif;
+            font-family: Helvetica, Arial, sans-serif;
             font-weight: 700;
             text-transform: uppercase;
         }
-        h1 { font-size: 18px; margin: 18px 0 10px 0; }
-        h2 { font-size: 15px; margin: 16px 0 8px 0; }
-        h3 { font-size: 13px; margin: 12px 0 6px 0; }
+        h1 { font-size: 14pt; margin: 14pt 0 8pt 0; }
+        h2 { font-size: 12pt; margin: 12pt 0 6pt 0; }
+        h3 { font-size: 10pt; margin: 10pt 0 4pt 0; }
         p {
             margin: 0 0 8px 0;
             line-height: 1.55;
