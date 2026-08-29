@@ -11,26 +11,24 @@
     <title>Formato de Alta - {{ $producto->nombre }}</title>
     <style>
         @page {
-            size: 595.28pt 841.89pt;
+            size: A4 portrait;
             margin: 0;
         }
         * {
             box-sizing: border-box;
         }
-        body {
+        html, body {
+            width: 100%;
+            height: 100%;
             margin: 0;
             padding: 0;
             font-family: Helvetica, Arial, sans-serif;
             color: #111827;
             background: #ffffff;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
         }
         .a4-page-sheet {
-            width: 595.28pt;
-            height: 841.89pt;
-            max-width: 595.28pt;
-            max-height: 841.89pt;
+            width: 100%;
+            height: 100%;
             position: relative;
             background: #ffffff;
             box-sizing: border-box;
