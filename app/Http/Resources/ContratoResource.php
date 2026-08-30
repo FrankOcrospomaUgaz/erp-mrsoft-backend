@@ -17,6 +17,7 @@ class ContratoResource extends JsonResource
             'tipo_contrato'=> $this->tipo_contrato,
             'vigencia_contrato' => $this->vigencia_contrato,
             'duracion_anios' => $this->duracion_anios,
+            'costo_instalacion' => (float) ($this->costo_instalacion ?? 0),
             'total'        => $this->total,
             'forma_pago'   => $this->forma_pago,
             'estado'       => $this->estado,

@@ -406,20 +406,23 @@ class ContratoController extends Controller
         $table->addCell(1000)->addText('Cantidad', $fBold, ['alignment' => Jc::CENTER]);
         $table->addCell(1400)->addText('Total', $fBold, ['alignment' => Jc::CENTER]);
 
+        $costoInstalacion = $periodicidadPago === 'mensual' ? (float) ($contrato->costo_instalacion ?? 0) : 0;
+        $cantPeriodo = $periodicidadPago === 'anual' ? max(1, (int) $contrato->duracion_anios) : max(1, $cuotas->count());
+        $totalServicioRecurrente = (float) ($baseServicio * $cantPeriodo);
+
         $table->addRow();
         $table->addCell(800)->addText('01', $fNormal, ['alignment' => Jc::CENTER]);
         $table->addCell(4600)->addText('Pago instalación del servicio de plataforma de software para alojamiento ' . $productoPrincipal, $fNormal);
-        $table->addCell(1400)->addText('S/ 0.00', $fNormal, ['alignment' => Jc::CENTER]);
+        $table->addCell(1400)->addText('S/ ' . number_format($costoInstalacion, 2, '.', ''), $fNormal, ['alignment' => Jc::CENTER]);
         $table->addCell(1000)->addText('1', $fNormal, ['alignment' => Jc::CENTER]);
-        $table->addCell(1400)->addText('S/ 0.00', $fNormal, ['alignment' => Jc::CENTER]);
+        $table->addCell(1400)->addText('S/ ' . number_format($costoInstalacion, 2, '.', ''), $fNormal, ['alignment' => Jc::CENTER]);
 
-        $cantPeriodo = $periodicidadPago === 'anual' ? max(1, (int) $contrato->duracion_anios) : max(1, $cuotas->count());
         $table->addRow();
         $table->addCell(800)->addText('02', $fNormal, ['alignment' => Jc::CENTER]);
         $table->addCell(4600)->addText($descripcionServicio, $fNormal);
         $table->addCell(1400)->addText('S/ ' . number_format($baseServicio, 2, '.', ''), $fNormal, ['alignment' => Jc::CENTER]);
         $table->addCell(1000)->addText((string)$cantPeriodo, $fNormal, ['alignment' => Jc::CENTER]);
-        $table->addCell(1400)->addText('S/ ' . number_format((float) $contrato->total, 2, '.', ''), $fNormal, ['alignment' => Jc::CENTER]);
+        $table->addCell(1400)->addText('S/ ' . number_format($totalServicioRecurrente, 2, '.', ''), $fNormal, ['alignment' => Jc::CENTER]);
 
         $table->addRow();
         $cellTotal = $table->addCell(9200, ['gridSpan' => 5]);
@@ -443,8 +446,21 @@ class ContratoController extends Controller
         $pCl3->addText('S/ ' . number_format((float) $contrato->total, 2, '.', '') . ' (' . $montoTotalLetras . ')', $fBold);
         $pCl3->addText(', incluido el IGV, ');
         if ($contrato->forma_pago === 'parcial') {
-            $cuotaMonto = number_format((float) ($cuotas->first()->monto ?? 0), 2, '.', '');
-            $pCl3->addText('el cual será cancelado en ' . $cuotasTexto . ' (' . $cuotas->count() . ') cuota' . ($cuotas->count() === 1 ? '' : 's') . ' ' . $periodicidadPago . ($cuotas->count() === 1 ? '' : 'es') . ' de S/ ' . $cuotaMonto . ' soles.');
+            $primeraCuota = (float) ($cuotas->first()->monto ?? 0);
+            $restoCuotas = $cuotas->slice(1);
+            $restoCuotaMonto = (float) ($restoCuotas->first()?->monto ?? $primeraCuota);
+            $todasIguales = $cuotas->every(fn($c) => abs((float)$c->monto - $primeraCuota) < 0.01);
+
+            if ($todasIguales) {
+                $pCl3->addText('el cual será cancelado en ' . $cuotasTexto . ' (' . $cuotas->count() . ') cuota' . ($cuotas->count() === 1 ? '' : 's') . ' ' . $periodicidadPago . ($cuotas->count() === 1 ? '' : 'es') . ' de S/ ' . number_format($primeraCuota, 2, '.', '') . ' soles.');
+            } else {
+                $cantRestantesTexto = match ($restoCuotas->count()) {
+                    1 => 'una', 2 => 'dos', 3 => 'tres', 4 => 'cuatro', 5 => 'cinco',
+                    6 => 'seis', 7 => 'siete', 8 => 'ocho', 9 => 'nueve', 10 => 'diez',
+                    11 => 'once', 12 => 'doce', default => (string) $restoCuotas->count(),
+                };
+                $pCl3->addText('el cual será cancelado en ' . $cuotasTexto . ' (' . $cuotas->count() . ') cuota' . ($cuotas->count() === 1 ? '' : 's') . ' ' . $periodicidadPago . ($cuotas->count() === 1 ? '' : 'es') . ': la primera cuota de S/ ' . number_format($primeraCuota, 2, '.', '') . ' soles' . ($costoInstalacion > 0 ? ' (incluye costo de instalación de S/ ' . number_format($costoInstalacion, 2, '.', '') . ')' : '') . ' y ' . $cantRestantesTexto . ' (' . $restoCuotas->count() . ') cuota' . ($restoCuotas->count() === 1 ? '' : 's') . ' de S/ ' . number_format($restoCuotaMonto, 2, '.', '') . ' soles.');
+            }
         } else {
             $pCl3->addText('el cual será cancelado en un solo pago.');
         }
@@ -859,6 +875,7 @@ class ContratoController extends Controller
             'tipo_contrato' => $prefix . 'string|in:desarrollo,saas,soporte',
             'vigencia_contrato' => $prefix . 'string|in:semestral,anual',
             'duracion_anios' => 'nullable|integer|min:1',
+            'costo_instalacion' => 'nullable|numeric|min:0',
             'total' => $prefix . 'numeric|min:0',
             'forma_pago' => $prefix . 'string|in:unico,parcial',
             'periodicidad_cuota' => $prefix . 'string|in:mensual,anual',
@@ -922,10 +939,15 @@ class ContratoController extends Controller
             'tipo_contrato',
             'vigencia_contrato',
             'duracion_anios',
+            'costo_instalacion',
             'total',
             'forma_pago',
             'periodicidad_cuota',
         ]);
+
+        if (($request->input('periodicidad_cuota') ?? null) === 'anual') {
+            $attributes['costo_instalacion'] = 0;
+        }
 
         if (($request->input('forma_pago') ?? null) === 'unico') {
             $attributes['periodicidad_cuota'] = $request->input('periodicidad_cuota');

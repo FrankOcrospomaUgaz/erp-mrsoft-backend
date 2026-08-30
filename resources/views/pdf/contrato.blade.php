@@ -131,16 +131,16 @@
                     <tr>
                         <td class="text-center">01</td>
                         <td>Pago instalacion del servicio de plataforma de software para alojamiento {{ $productoPrincipal }}</td>
-                        <td class="text-center">S/ 0.00</td>
+                        <td class="text-center">S/ {{ number_format($costoInstalacion, 2, '.', '') }}</td>
                         <td class="text-center">1</td>
-                        <td class="text-center">S/ 0.00</td>
+                        <td class="text-center">S/ {{ number_format($costoInstalacion, 2, '.', '') }}</td>
                     </tr>
                     <tr>
                         <td class="text-center">02</td>
                         <td>{{ $descripcionServicio }}</td>
                         <td class="text-center">S/ {{ number_format($baseServicio, 2, '.', '') }}</td>
-                        <td class="text-center">{{ $periodicidadPago === 'anual' ? max(1, (int) $contrato->duracion_anios) : max(1, $cuotas->count()) }}</td>
-                        <td class="text-center">S/ {{ number_format((float) $contrato->total, 2, '.', '') }}</td>
+                        <td class="text-center">{{ $cantPeriodo }}</td>
+                        <td class="text-center">S/ {{ number_format($totalServicioRecurrente, 2, '.', '') }}</td>
                     </tr>
                     <tr>
                         <td colspan="5" class="text-right"><strong>TOTAL DEL CONTRATO CON IGV S/ {{ number_format((float) $contrato->total, 2, '.', '') }}</strong></td>
@@ -169,9 +169,33 @@
                 <strong>S/ {{ number_format((float) $contrato->total, 2, '.', '') }} ({{ $montoTotalLetras }})</strong>,
                 incluido el IGV,
                 @if($contrato->forma_pago === 'parcial')
-                    el cual sera cancelado en {{ $cuotasTexto }} ({{ $cuotas->count() }}) cuota{{ $cuotas->count() === 1 ? '' : 's' }}
-                    {{ $periodicidadPago }}{{ $cuotas->count() === 1 ? '' : 'es' }}
-                    de S/ {{ number_format((float) ($cuotas->first()->monto ?? 0), 2, '.', '') }} soles.
+                    @php
+                        $primeraCuota = (float) ($cuotas->first()->monto ?? 0);
+                        $restoCuotas = $cuotas->slice(1);
+                        $restoCuotaMonto = (float) ($restoCuotas->first()?->monto ?? $primeraCuota);
+                        $todasIguales = $cuotas->every(fn($c) => abs((float)$c->monto - $primeraCuota) < 0.01);
+                    @endphp
+                    @if($todasIguales)
+                        el cual sera cancelado en {{ $cuotasTexto }} ({{ $cuotas->count() }}) cuota{{ $cuotas->count() === 1 ? '' : 's' }}
+                        {{ $periodicidadPago }}{{ $cuotas->count() === 1 ? '' : 'es' }}
+                        de S/ {{ number_format($primeraCuota, 2, '.', '') }} soles.
+                    @else
+                        @php
+                            $cantRestantesTexto = match ($restoCuotas->count()) {
+                                1 => 'una', 2 => 'dos', 3 => 'tres', 4 => 'cuatro', 5 => 'cinco',
+                                6 => 'seis', 7 => 'siete', 8 => 'ocho', 9 => 'nueve', 10 => 'diez',
+                                11 => 'once', 12 => 'doce', default => (string) $restoCuotas->count(),
+                            };
+                        @endphp
+                        el cual sera cancelado en {{ $cuotasTexto }} ({{ $cuotas->count() }}) cuota{{ $cuotas->count() === 1 ? '' : 's' }}
+                        {{ $periodicidadPago }}{{ $cuotas->count() === 1 ? '' : 'es' }}:
+                        la primera cuota de S/ {{ number_format($primeraCuota, 2, '.', '') }} soles
+                        @if($costoInstalacion > 0)
+                            (incluye costo de instalacion de S/ {{ number_format($costoInstalacion, 2, '.', '') }})
+                        @endif
+                        y {{ $cantRestantesTexto }} ({{ $restoCuotas->count() }}) cuota{{ $restoCuotas->count() === 1 ? '' : 's' }}
+                        de S/ {{ number_format($restoCuotaMonto, 2, '.', '') }} soles.
+                    @endif
                 @else
                     el cual sera cancelado en un solo pago.
                 @endif
