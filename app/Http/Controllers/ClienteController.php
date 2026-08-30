@@ -787,7 +787,7 @@ class ClienteController extends Controller
 
     private function ensureClientePortalUser(?Cliente $cliente): void
     {
-        if (!$cliente || empty($cliente->ruc) || $this->normalizeTipo($cliente->tipo) === 'local') {
+        if (!$cliente || empty($cliente->ruc)) {
             return;
         }
 

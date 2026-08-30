@@ -289,10 +289,10 @@ class ContratoController extends Controller
         $direccionEmisor = $facturador->direccion ?? 'Calle Nicolas la Torre 126 Urb. Magisterial, Chiclayo, Lambayeque';
         $representanteEmisor = 'AMPUERO PASCO GILBERTO MARTIN';
         $dniRepresentanteEmisor = '16734323';
-        $nombreCliente = strtoupper($empresaCliente->razon_social ?? $empresaCliente->nombre_comercial ?? 'CLIENTE');
-        $rucCliente = $empresaCliente->ruc ?? 'N/D';
+        $nombreCliente = strtoupper($cliente->razon_social ?? $empresaCliente->razon_social ?? $cliente->nombre_comercial ?? $empresaCliente->nombre_comercial ?? 'CLIENTE');
+        $rucCliente = $cliente->ruc ?: ($empresaCliente->ruc ?? 'N/D');
         $representanteCliente = strtoupper($cliente->dueno_nombre ?? $empresaCliente->dueno_nombre ?? 'SIN REPRESENTANTE');
-        $dniCliente = $cliente->contactos_clientes[0]->dni ?? 'N/D';
+        $dniCliente = $cliente->contactos_clientes[0]->dni ?? $empresaCliente->contactos_clientes[0]->dni ?? 'N/D';
 
         $tipoContratoDesc = $this->resolveContractTypeDescription($contrato->tipo_contrato);
         $productoPrincipalRaw = $modulosAgrupados->first()['producto'] ?? strtoupper($tipoContratoDesc);

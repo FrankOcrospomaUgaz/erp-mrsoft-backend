@@ -173,7 +173,8 @@ class ComprobanteService
 
     private function validarCliente(Cliente $cliente, string $tipoDocumento): void
     {
-        if ($tipoDocumento === 'F' && !preg_match('/^\d{11}$/', (string) $cliente->ruc)) {
+        $rucResolvido = $cliente->ruc ?: $cliente->parent_cliente?->ruc ?: $cliente->parent_cliente?->parent_cliente?->ruc;
+        if ($tipoDocumento === 'F' && !preg_match('/^\d{11}$/', (string) $rucResolvido)) {
             throw ValidationException::withMessages([
                 'cliente_id' => 'Para emitir factura el cliente debe tener RUC de 11 digitos.',
             ]);
@@ -240,7 +241,18 @@ class ComprobanteService
     private function armarPayload(Comprobante $comprobante, Facturador $facturador): array
     {
         $cliente = $comprobante->cliente;
-        $contacto = $cliente->contactos_clientes->first();
+        $parent = $cliente->parent_cliente;
+        $grandParent = $parent?->parent_cliente;
+        $contacto = $cliente->contactos_clientes->first() ?: $parent?->contactos_clientes?->first();
+
+        $rucResolvido = $cliente->ruc ?: $parent?->ruc ?: $grandParent?->ruc;
+        $razonSocialResolvida = $cliente->razon_social
+            ?: ($cliente->ruc ? $cliente->nombre_comercial : null)
+            ?: $parent?->razon_social
+            ?: $grandParent?->razon_social
+            ?: $cliente->nombre_comercial
+            ?: $contacto?->nombre;
+        $direccionResolvida = $cliente->direccion ?: $parent?->direccion ?: $grandParent?->direccion;
 
         return [
             'empresa_id' => $facturador->empresa_id,
@@ -254,10 +266,10 @@ class ComprobanteService
             'formapago' => $comprobante->forma_pago,
             'porcentajeigv' => (float) $facturador->porcentaje_igv,
             'cliente' => [
-                'tipo_doc' => $comprobante->tipo_documento === 'F' ? '6' : ($contacto?->dni ? '1' : '0'),
-                'numero_doc' => $cliente->ruc ?: $contacto?->dni,
-                'nombre' => $cliente->razon_social ?: $cliente->nombre_comercial ?: $contacto?->nombre,
-                'direccion' => $cliente->direccion,
+                'tipo_doc' => $comprobante->tipo_documento === 'F' ? '6' : ($rucResolvido ? '6' : ($contacto?->dni ? '1' : '0')),
+                'numero_doc' => $rucResolvido ?: $contacto?->dni,
+                'nombre' => $razonSocialResolvida,
+                'direccion' => $direccionResolvida,
             ],
             'detalles' => $comprobante->detalles->map(fn ($detalle) => [
                 'tipodetalle' => 'V',
