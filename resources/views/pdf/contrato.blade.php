@@ -91,6 +91,9 @@
             12 => 'doce',
             default => (string) $cuotas->count(),
         };
+        $costoInstalacion = $periodicidadPago === 'mensual' ? (float) ($contrato->costo_instalacion ?? 0) : 0;
+        $cantPeriodo = $periodicidadPago === 'anual' ? max(1, (int) $contrato->duracion_anios) : max(1, $cuotas->count());
+        $totalServicioRecurrente = (float) ($baseServicio * $cantPeriodo);
     @endphp
 
     <div class="title-number">CONTRATO N&deg; {{ $contrato->numero }}</div>
