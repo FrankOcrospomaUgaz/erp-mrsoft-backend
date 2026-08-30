@@ -27,6 +27,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('comprobantes', App\Http\Controllers\ComprobanteController::class)->only(['index', 'show']);
     Route::get('contratos/siguiente-numero', [App\Http\Controllers\ContratoController::class, 'siguienteNumero']);
     Route::get('contratos/{id}/pdf', [App\Http\Controllers\ContratoController::class, 'pdf']);
+    Route::get('contratos/{id}/word', [App\Http\Controllers\ContratoController::class, 'word']);
     Route::apiResource('contratos', App\Http\Controllers\ContratoController::class)->only(['index', 'show']);
     Route::apiResource('cuotas', App\Http\Controllers\CuotaController::class)->only(['index', 'show']);
 

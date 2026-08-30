@@ -12,6 +12,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
+use PhpOffice\PhpWord\PhpWord;
+use PhpOffice\PhpWord\IOFactory;
+use PhpOffice\PhpWord\SimpleType\Jc;
+use PhpOffice\PhpWord\SimpleType\JcTable;
+use PhpOffice\PhpWord\Style\ListItem;
 
 class ContratoController extends Controller
 {
@@ -234,6 +239,378 @@ class ContratoController extends Controller
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => 'inline; filename="contrato-' . $contrato->numero . '.pdf"',
         ]);
+    }
+
+    public function word(Request $request, $id)
+    {
+        $contrato = Contrato::with([
+            'cliente.parent_cliente.parent_cliente',
+            'cuotas',
+            'contratoProductoModulos.modulo',
+            'contratoProductoModulos.producto',
+        ])->find($id);
+
+        if (!$contrato) {
+            return response()->json([
+                'status' => 404,
+                'message' => 'Contrato no encontrado',
+            ], 404);
+        }
+
+        if (!$this->canAccessContrato($request, $contrato)) {
+            return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
+        }
+
+        $cliente = $contrato->cliente;
+        $jerarquia = $this->buildClientHierarchy($cliente);
+        $facturador = Facturador::where('activo', true)->latest()->first() ?? Facturador::latest()->first();
+        $modulosAgrupados = $contrato->contratoProductoModulos
+            ->groupBy(fn($item) => $item->producto?->nombre ?? 'Servicio')
+            ->map(function ($items, $producto) {
+                return [
+                    'producto' => $producto,
+                    'items' => $items,
+                    'subtotal' => $items->sum('precio'),
+                ];
+            })
+            ->values();
+
+        $firmaArrendador = $contrato->firma_arrendador ?? $facturador?->firma_arrendador_default ?? null;
+        $firmaCliente = $contrato->firma_cliente ?? null;
+
+        $brandMap = [
+            'hotelhub' => 'HotelHUB',
+            'gesrest' => 'Gesrest',
+            '360sys' => '360Sys',
+        ];
+        $empresaCliente = $jerarquia['empresa'] ?? $jerarquia['root'];
+        $nombreEmisor = strtoupper($facturador->nombre_comercial ?? $facturador->razon_social ?? 'GARZASOFT EIRL');
+        $rucEmisor = $facturador->ruc ?? '20602871119';
+        $direccionEmisor = $facturador->direccion ?? 'Calle Nicolas la Torre 126 Urb. Magisterial, Chiclayo, Lambayeque';
+        $representanteEmisor = 'AMPUERO PASCO GILBERTO MARTIN';
+        $dniRepresentanteEmisor = '16734323';
+        $nombreCliente = strtoupper($empresaCliente->razon_social ?? $empresaCliente->nombre_comercial ?? 'CLIENTE');
+        $rucCliente = $empresaCliente->ruc ?? 'N/D';
+        $representanteCliente = strtoupper($cliente->dueno_nombre ?? $empresaCliente->dueno_nombre ?? 'SIN REPRESENTANTE');
+        $dniCliente = $cliente->contactos_clientes[0]->dni ?? 'N/D';
+
+        $tipoContratoDesc = $this->resolveContractTypeDescription($contrato->tipo_contrato);
+        $productoPrincipalRaw = $modulosAgrupados->first()['producto'] ?? strtoupper($tipoContratoDesc);
+        $productoPrincipal = $brandMap[strtolower($productoPrincipalRaw)] ?? $productoPrincipalRaw;
+        $periodicidadPago = $contrato->periodicidad_cuota === 'anual' ? 'anual' : 'mensual';
+        $descripcionServicio = 'Pago ' . strtoupper($periodicidadPago === 'anual' ? 'ANUAL' : 'MENSUAL') . ' por servicio de plataforma de software para alojamiento ' . $productoPrincipal;
+        $baseServicio = collect($contrato->contratoProductoModulos)->sum('precio');
+        $cuotas = $contrato->cuotas->sortBy('fecha_vencimiento')->values();
+        $fechaInicioContrato = Carbon::parse($contrato->fecha_inicio);
+        $fechaFinContrato = Carbon::parse($contrato->fecha_fin);
+        $fechaContrato = $fechaInicioContrato->copy()->subDay();
+        $mesesCantidad = $contrato->vigencia_contrato === 'anual'
+            ? ((int) ($contrato->duracion_anios ?: 1) * 12)
+            : 6;
+        $mesesTexto = match ($mesesCantidad) {
+            6 => 'seis (6)',
+            12 => 'doce (12)',
+            24 => 'veinticuatro (24)',
+            36 => 'treinta y seis (36)',
+            48 => 'cuarenta y ocho (48)',
+            60 => 'sesenta (60)',
+            default => $mesesCantidad . ' (' . $mesesCantidad . ')',
+        };
+        $meses = [
+            1 => 'enero', 2 => 'febrero', 3 => 'marzo', 4 => 'abril', 5 => 'mayo', 6 => 'junio',
+            7 => 'julio', 8 => 'agosto', 9 => 'septiembre', 10 => 'octubre', 11 => 'noviembre', 12 => 'diciembre',
+        ];
+        $fechaInicioTexto = $fechaInicioContrato->format('d') . ' de ' . ucfirst($meses[(int) $fechaInicioContrato->format('n')]) . ' del ' . $fechaInicioContrato->format('Y');
+        $fechaFinTexto = $fechaFinContrato->format('d') . ' de ' . ucfirst($meses[(int) $fechaFinContrato->format('n')]) . ' del ' . $fechaFinContrato->format('Y');
+        $fechaFirmaMes = $meses[(int) $fechaContrato->format('n')];
+        $cuotasTexto = match ($cuotas->count()) {
+            1 => 'una', 2 => 'dos', 3 => 'tres', 4 => 'cuatro', 5 => 'cinco',
+            6 => 'seis', 7 => 'siete', 8 => 'ocho', 9 => 'nueve', 10 => 'diez',
+            11 => 'once', 12 => 'doce', default => (string) $cuotas->count(),
+        };
+        $montoTotalLetras = $this->amountToWords((float) $contrato->total);
+
+        // Crear documento PhpWord
+        $phpWord = new PhpWord();
+        $phpWord->setDefaultFontName('Arial');
+        $phpWord->setDefaultFontSize(10);
+
+        $section = $phpWord->addSection([
+            'marginTop' => 1100,
+            'marginBottom' => 1100,
+            'marginLeft' => 1400,
+            'marginRight' => 1400,
+        ]);
+
+        // Estilos de párrafo y fuente
+        $pCenter = ['alignment' => Jc::CENTER, 'spaceAfter' => 60, 'spaceBefore' => 0];
+        $pJustify = ['alignment' => Jc::BOTH, 'spaceAfter' => 80, 'spaceBefore' => 0, 'lineHeight' => 1.15];
+        $fTitle = ['bold' => true, 'size' => 11, 'color' => '000000'];
+        $fTitleUnderline = ['bold' => true, 'underline' => 'single', 'size' => 10.5, 'color' => '000000'];
+        $fClauseTitle = ['bold' => true, 'underline' => 'single', 'size' => 10, 'color' => '000000'];
+        $fBold = ['bold' => true];
+        $fNormal = [];
+
+        // Encabezado
+        $section->addText('CONTRATO N° ' . $contrato->numero, $fTitle, $pCenter);
+        $section->addText('CONTRATO DEL SERVICIO DE ARRENDAMIENTO DE LA PLATAFORMA DE SOFTWARE PARA', $fTitleUnderline, $pCenter);
+        $section->addText('ALOJAMIENTO ' . strtoupper($productoPrincipal), $fTitleUnderline, $pCenter);
+        $section->addTextBreak(1);
+
+        // Preámbulo
+        $pIntro = $section->addTextRun($pJustify);
+        $pIntro->addText('Conste por el presente documento el contrato del servicio de arrendamiento de la plataforma de software para alojamiento ' . $productoPrincipal . ', que celebran de una parte ');
+        $pIntro->addText($nombreEmisor, $fBold);
+        $pIntro->addText(' con RUC N° ');
+        $pIntro->addText($rucEmisor, $fBold);
+        $pIntro->addText(', domicilio en ' . $direccionEmisor . ', y debidamente representada por su representante legal quien firma el presente documento, ');
+        $pIntro->addText($representanteEmisor, $fBold);
+        $pIntro->addText(' con DNI ' . $dniRepresentanteEmisor . ', en adelante ');
+        $pIntro->addText('EL ARRENDADOR', $fBold);
+        $pIntro->addText(' y de otra parte ');
+        $pIntro->addText($nombreCliente, $fBold);
+        $pIntro->addText(' con RUC N° ');
+        $pIntro->addText($rucCliente, $fBold);
+        $pIntro->addText(' representada por el señor ');
+        $pIntro->addText($representanteCliente, $fBold);
+        $pIntro->addText(' con DNI N° ');
+        $pIntro->addText($dniCliente, $fBold);
+        $pIntro->addText(', en adelante ');
+        $pIntro->addText('EL CLIENTE', $fBold);
+        $pIntro->addText(', en los términos y condiciones siguientes:');
+
+        // CLÁUSULA PRIMERA
+        $section->addText('CLÁUSULA PRIMERA: ANTECEDENTES', $fClauseTitle, ['spaceBefore' => 120, 'spaceAfter' => 40]);
+        $pCl1 = $section->addTextRun($pJustify);
+        $pCl1->addText('Con fecha ' . $fechaContrato->format('d-m-Y') . ', ');
+        $pCl1->addText('EL ARRENDADOR', $fBold);
+        $pCl1->addText(' envió la cotización para el Arrendamiento de la plataforma de software para alojamiento ' . $productoPrincipal . ' para ');
+        $pCl1->addText('EL CLIENTE', $fBold);
+        $pCl1->addText(', cuyos detalles y totales, se detallan a continuación:');
+
+        // Tabla de antecedentes
+        $tableStyle = [
+            'borderSize' => 6,
+            'borderColor' => '000000',
+            'cellMarginTop' => 60,
+            'cellMarginBottom' => 60,
+            'cellMarginLeft' => 80,
+            'cellMarginRight' => 80,
+            'alignment' => JcTable::CENTER,
+        ];
+        $table = $section->addTable($tableStyle);
+        $table->addRow(280);
+        $table->addCell(800)->addText('Item', $fBold, ['alignment' => Jc::CENTER]);
+        $table->addCell(4600)->addText('Descripción', $fBold, ['alignment' => Jc::CENTER]);
+        $table->addCell(1400)->addText('P.Unitario', $fBold, ['alignment' => Jc::CENTER]);
+        $table->addCell(1000)->addText('Cantidad', $fBold, ['alignment' => Jc::CENTER]);
+        $table->addCell(1400)->addText('Total', $fBold, ['alignment' => Jc::CENTER]);
+
+        $table->addRow();
+        $table->addCell(800)->addText('01', $fNormal, ['alignment' => Jc::CENTER]);
+        $table->addCell(4600)->addText('Pago instalación del servicio de plataforma de software para alojamiento ' . $productoPrincipal, $fNormal);
+        $table->addCell(1400)->addText('S/ 0.00', $fNormal, ['alignment' => Jc::CENTER]);
+        $table->addCell(1000)->addText('1', $fNormal, ['alignment' => Jc::CENTER]);
+        $table->addCell(1400)->addText('S/ 0.00', $fNormal, ['alignment' => Jc::CENTER]);
+
+        $cantPeriodo = $periodicidadPago === 'anual' ? max(1, (int) $contrato->duracion_anios) : max(1, $cuotas->count());
+        $table->addRow();
+        $table->addCell(800)->addText('02', $fNormal, ['alignment' => Jc::CENTER]);
+        $table->addCell(4600)->addText($descripcionServicio, $fNormal);
+        $table->addCell(1400)->addText('S/ ' . number_format($baseServicio, 2, '.', ''), $fNormal, ['alignment' => Jc::CENTER]);
+        $table->addCell(1000)->addText((string)$cantPeriodo, $fNormal, ['alignment' => Jc::CENTER]);
+        $table->addCell(1400)->addText('S/ ' . number_format((float) $contrato->total, 2, '.', ''), $fNormal, ['alignment' => Jc::CENTER]);
+
+        $table->addRow();
+        $cellTotal = $table->addCell(9200, ['gridSpan' => 5]);
+        $cellTotal->addText('TOTAL DEL CONTRATO CON IGV S/ ' . number_format((float) $contrato->total, 2, '.', ''), $fBold, ['alignment' => Jc::RIGHT]);
+
+        // CLÁUSULA SEGUNDA
+        $section->addText('CLÁUSULA SEGUNDA: OBJETO', $fClauseTitle, ['spaceBefore' => 120, 'spaceAfter' => 40]);
+        $pCl2 = $section->addTextRun($pJustify);
+        $pCl2->addText('El presente proceso contrato tiene por objeto el Arrendamiento de la plataforma de software para alojamiento ' . $productoPrincipal . ' para ');
+        $pCl2->addText('EL CLIENTE', $fBold);
+        $pCl2->addText('.');
+
+        foreach ($contrato->contratoProductoModulos as $item) {
+            $section->addListItem('Módulo ' . ($item->modulo?->nombre ?? 'Servicio'), 0, $fNormal, ['listType' => ListItem::TYPE_BULLET_FILLED], ['spaceAfter' => 20]);
+        }
+
+        // CLÁUSULA TERCERA
+        $section->addText('CLÁUSULA TERCERA: MONTO CONTRACTUAL', $fClauseTitle, ['spaceBefore' => 120, 'spaceAfter' => 40]);
+        $pCl3 = $section->addTextRun($pJustify);
+        $pCl3->addText('El monto total del arrendamiento materia del presente contrato asciende a ');
+        $pCl3->addText('S/ ' . number_format((float) $contrato->total, 2, '.', '') . ' (' . $montoTotalLetras . ')', $fBold);
+        $pCl3->addText(', incluido el IGV, ');
+        if ($contrato->forma_pago === 'parcial') {
+            $cuotaMonto = number_format((float) ($cuotas->first()->monto ?? 0), 2, '.', '');
+            $pCl3->addText('el cual será cancelado en ' . $cuotasTexto . ' (' . $cuotas->count() . ') cuota' . ($cuotas->count() === 1 ? '' : 's') . ' ' . $periodicidadPago . ($cuotas->count() === 1 ? '' : 'es') . ' de S/ ' . $cuotaMonto . ' soles.');
+        } else {
+            $pCl3->addText('el cual será cancelado en un solo pago.');
+        }
+
+        // CLÁUSULA CUARTA
+        $section->addText('CLÁUSULA CUARTA: FORMA DE PAGO', $fClauseTitle, ['spaceBefore' => 120, 'spaceAfter' => 40]);
+        $pCl4 = $section->addTextRun($pJustify);
+        $pCl4->addText('EL CLIENTE', $fBold);
+        $pCl4->addText(' se obliga a pagar la contraprestación del servicio en modalidad ' . $periodicidadPago . ' a ');
+        $pCl4->addText('EL ARRENDADOR', $fBold);
+        $pCl4->addText(' en moneda Soles luego de la firma del presente contrato y antes de iniciar el uso de la plataforma ' . $productoPrincipal . ', mediante depósito en cuenta bancaria de la empresa ');
+        $pCl4->addText('EL ARRENDADOR', $fBold);
+        $pCl4->addText('.');
+
+        $section->addText('Cuentas a nombre de ' . $nombreEmisor, $fBold, ['spaceBefore' => 60, 'spaceAfter' => 20]);
+        $section->addText('BANCO CONTINENTAL DEL PERÚ (BBVA)', $fBold, ['spaceAfter' => 10]);
+        $section->addText('Cuenta en soles: 0011-0442-0200095395-16', $fNormal, ['spaceAfter' => 10]);
+        $section->addText('Cuenta CCI en soles: 011-442-000200095395-16', $fNormal, ['spaceAfter' => 40]);
+        $section->addText('BANCO DE CRÉDITO DEL PERÚ (BCP)', $fBold, ['spaceAfter' => 10]);
+        $section->addText('Cuenta en soles: 415-2646186-0-69', $fNormal, ['spaceAfter' => 10]);
+        $section->addText('Cuenta CCI en soles: 00241500264618606989', $fNormal, ['spaceAfter' => 60]);
+
+        // CLÁUSULA QUINTA
+        $section->addText('CLÁUSULA QUINTA: INICIO Y CULMINACIÓN DE LA PRESTACIÓN', $fClauseTitle, ['spaceBefore' => 120, 'spaceAfter' => 40]);
+        $section->addText('La vigencia del presente contrato se extenderá a partir del día siguiente a su suscripción hasta por un tiempo de ' . $mesesTexto . ' meses.', $fNormal, $pJustify);
+        $pCl5_2 = $section->addTextRun($pJustify);
+        $pCl5_2->addText('Quedando definido que el plazo de arrendamiento empezará a computarse desde el día ');
+        $pCl5_2->addText($fechaInicioTexto, $fBold);
+        $pCl5_2->addText(' y culminará el ');
+        $pCl5_2->addText($fechaFinTexto, $fBold);
+        $pCl5_2->addText('.');
+
+        // CLÁUSULA SEXTA
+        $section->addText('CLÁUSULA SEXTA: DOCUMENTOS MATERIA DEL CONTRATO', $fClauseTitle, ['spaceBefore' => 120, 'spaceAfter' => 40]);
+        $pCl6 = $section->addTextRun($pJustify);
+        $pCl6->addText('El presente contrato está conformado por la cotización aceptada por ');
+        $pCl6->addText('EL CLIENTE', $fBold);
+        $pCl6->addText('.');
+
+        // CLÁUSULA SÉPTIMA
+        $section->addText('CLÁUSULA SÉPTIMA: CONFORMIDAD DE LOS BIENES', $fClauseTitle, ['spaceBefore' => 120, 'spaceAfter' => 40]);
+        $pCl7_1 = $section->addTextRun($pJustify);
+        $pCl7_1->addText('La conformidad a la recepción de la prestación a cargo de ');
+        $pCl7_1->addText('EL CLIENTE', $fBold);
+        $pCl7_1->addText(' será dada por la Gerencia General o el Representante Legal.');
+        $section->addText('De existir observaciones en la conformidad del servicio materia de este contrato, se consignarán en el acta respectiva, indicándose claramente el sentido de estas, dándose a EL ARRENDADOR plazo prudencial para su subsanación, en función a la complejidad.', $fNormal, $pJustify);
+        $section->addText('Si pese al plazo otorgado, EL ARRENDADOR no cumpliese a cabalidad con la subsanación, EL CLIENTE podrá resolver el contrato, sin perjuicio de aplicar las penalidades que correspondan.', $fNormal, $pJustify);
+
+        // CLÁUSULA OCTAVA
+        $section->addText('CLÁUSULA OCTAVA: RESPONSABILIDADES DE EL ARRENDADOR Y EL CLIENTE', $fClauseTitle, ['spaceBefore' => 120, 'spaceAfter' => 40]);
+        $pCl8_1 = $section->addTextRun($pJustify);
+        $pCl8_1->addText('EL ARRENDADOR', $fBold);
+        $pCl8_1->addText(' tendrá las siguientes responsabilidades:');
+        $section->addListItem('Instalar y configurar la plataforma de software para alojamiento ' . $productoPrincipal . ' en los equipos que indique EL CLIENTE para los módulos contratados.', 0, $fNormal, ['listType' => ListItem::TYPE_BULLET_FILLED], ['spaceAfter' => 20]);
+        $section->addListItem('Ofrecer un nivel de atención de servicio ante fallas, no mayor a cuarenta y ocho (48) horas de reportado el incidente, en horario de lunes a sábado de 09:00 a 18:00 horas.', 0, $fNormal, ['listType' => ListItem::TYPE_BULLET_FILLED], ['spaceAfter' => 20]);
+        $section->addListItem('Poner a disposición del cliente la URL https://hotelhub.com.pe para uso de la plataforma de software para alojamiento ' . $productoPrincipal . '.', 0, $fNormal, ['listType' => ListItem::TYPE_BULLET_FILLED], ['spaceAfter' => 20]);
+        $section->addListItem('Poner a disposición del cliente la URL https://comprobante-e.com para consulta de sus clientes de los comprobantes electrónicos de venta emitidos y consulta del contador en rango de fechas.', 0, $fNormal, ['listType' => ListItem::TYPE_BULLET_FILLED], ['spaceAfter' => 20]);
+        $section->addListItem('Almacenar en su servidor los datos resultado del uso de la plataforma de software para alojamiento ' . $productoPrincipal . ' por el plazo de duración de este contrato.', 0, $fNormal, ['listType' => ListItem::TYPE_BULLET_FILLED], ['spaceAfter' => 20]);
+        $section->addListItem('Cuando EL CLIENTE tenga retraso en el pago, EL ARRENDADOR puede suspender el servicio, sin perjuicio de aplicar las penalidades que correspondan.', 0, $fNormal, ['listType' => ListItem::TYPE_BULLET_FILLED], ['spaceAfter' => 40]);
+
+        $pCl8_2 = $section->addTextRun($pJustify);
+        $pCl8_2->addText('EL CLIENTE', $fBold);
+        $pCl8_2->addText(' tendrá las siguientes responsabilidades:');
+        $section->addListItem('Contar con una conexión a Internet adecuada que asegure la correcta operación de la plataforma de software para alojamiento ' . $productoPrincipal . '.', 0, $fNormal, ['listType' => ListItem::TYPE_BULLET_FILLED], ['spaceAfter' => 20]);
+        $section->addListItem('Informar con un plazo no mayor a veinticuatro (24) horas sobre incidencias en el funcionamiento de la plataforma que impidan su correcto funcionamiento.', 0, $fNormal, ['listType' => ListItem::TYPE_BULLET_FILLED], ['spaceAfter' => 20]);
+        $section->addListItem('Garantizar y custodiar el correcto funcionamiento de los equipos de cómputo como computadoras e impresoras que garanticen el funcionamiento de la plataforma.', 0, $fNormal, ['listType' => ListItem::TYPE_BULLET_FILLED], ['spaceAfter' => 20]);
+        $section->addListItem('Realizar el pago por el servicio dentro de los plazos establecidos en la Cláusula Tercera de este contrato.', 0, $fNormal, ['listType' => ListItem::TYPE_BULLET_FILLED], ['spaceAfter' => 40]);
+
+        // CLÁUSULA NOVENA
+        $section->addText('CLÁUSULA NOVENA: RESOLUCIÓN DEL CONTRATO', $fClauseTitle, ['spaceBefore' => 120, 'spaceAfter' => 40]);
+        $section->addText('Constituirán causales de resolución del presente contrato las siguientes:', $fNormal, $pJustify);
+        $section->addText('1. El acuerdo mutuo de ambas partes.', $fNormal, $pJustify);
+        $section->addText('2. Cuando EL CLIENTE tenga retraso en el pago en reiteradas oportunidades EL ARRENDADOR puede finalizar el contrato, estando obligado EL CLIENTE al pago íntegro de los saldos del presente contrato.', $fNormal, $pJustify);
+
+        // CLÁUSULA DÉCIMA
+        $section->addText('CLÁUSULA DÉCIMA: DE LA CONFIDENCIALIDAD', $fClauseTitle, ['spaceBefore' => 120, 'spaceAfter' => 40]);
+        $pCl10 = $section->addTextRun($pJustify);
+        $pCl10->addText('EL ARRENDADOR', $fBold);
+        $pCl10->addText(' guardará confidencialidad sobre la información que le facilite ');
+        $pCl10->addText('EL CLIENTE', $fBold);
+        $pCl10->addText(' en o para la ejecución del contrato o que por su propia naturaleza deba ser tratada como tal. Se excluye de la categoría de información confidencial toda aquella información que sea divulgada por EL CLIENTE, aquella que haya de ser revelada de acuerdo con las leyes o con una resolución judicial o acto de autoridad competente. Este deber se mantendrá aún con posterioridad a la finalización del servicio.');
+
+        // CLÁUSULA DÉCIMO PRIMERA
+        $section->addText('CLÁUSULA DÉCIMO PRIMERA: MARCO LEGAL DEL CONTRATO', $fClauseTitle, ['spaceBefore' => 120, 'spaceAfter' => 40]);
+        $section->addText('Solo en lo no previsto en este contrato y demás normativa especial que resulte aplicable, se utilizarán las disposiciones pertinentes del Código Civil vigente y demás normas concordantes.', $fNormal, $pJustify);
+
+        // CLÁUSULA DÉCIMO SEGUNDA
+        $section->addText('CLÁUSULA DÉCIMO SEGUNDA: SOLUCIÓN DE CONTROVERSIAS', $fClauseTitle, ['spaceBefore' => 120, 'spaceAfter' => 40]);
+        $section->addText('Todos los conflictos que se deriven de la ejecución e interpretación del presente contrato, incluidos los que se refieran a su nulidad e invalidez, serán resueltos de manera definitiva e inapelable mediante arbitraje de derecho.', $fNormal, $pJustify);
+        $section->addText('Facultativamente, cualquiera de las partes podrá someter a conciliación la referida controversia, sin perjuicio de recurrir al arbitraje en caso no se llegue a un acuerdo entre ambas.', $fNormal, $pJustify);
+        $section->addText('De acuerdo con la cotización, las partes lo firman por duplicado en señal de conformidad en la ciudad de Chiclayo a los ' . $fechaContrato->format('d') . ' días del mes de ' . $fechaFirmaMes . ' del ' . $fechaContrato->format('Y') . '.', $fNormal, $pJustify);
+
+        // Firmas
+        $section->addTextBreak(2);
+        $sigTable = $section->addTable(['alignment' => JcTable::CENTER, 'borderSize' => 0]);
+        $sigTable->addRow(1600);
+
+        $tempFilesToDelete = [];
+
+        // Celda Arrendador
+        $cellArrendador = $sigTable->addCell(4500, ['valign' => 'bottom']);
+        if (!empty($firmaArrendador)) {
+            $tmpImg = $this->saveBase64ToTempFile($firmaArrendador);
+            if ($tmpImg) {
+                $cellArrendador->addImage($tmpImg, ['width' => 140, 'height' => 60, 'alignment' => Jc::CENTER]);
+                $tempFilesToDelete[] = $tmpImg;
+            }
+        }
+        $cellArrendador->addText('______________________________', $fNormal, ['alignment' => Jc::CENTER]);
+        $cellArrendador->addText('EL ARRENDADOR', $fBold, ['alignment' => Jc::CENTER]);
+
+        // Celda Cliente
+        $cellCliente = $sigTable->addCell(4500, ['valign' => 'bottom']);
+        if (!empty($firmaCliente)) {
+            $tmpImg = $this->saveBase64ToTempFile($firmaCliente);
+            if ($tmpImg) {
+                $cellCliente->addImage($tmpImg, ['width' => 140, 'height' => 60, 'alignment' => Jc::CENTER]);
+                $tempFilesToDelete[] = $tmpImg;
+            }
+        }
+        $cellCliente->addText('______________________________', $fNormal, ['alignment' => Jc::CENTER]);
+        $cellCliente->addText('EL CLIENTE', $fBold, ['alignment' => Jc::CENTER]);
+
+        // Guardar a archivo temporal y descargar
+        $objWriter = IOFactory::createWriter($phpWord, 'Word2007');
+        $tempDocx = tempnam(sys_get_temp_dir(), 'contrato_') . '.docx';
+        $objWriter->save($tempDocx);
+
+        // Limpiar imágenes temporales
+        foreach ($tempFilesToDelete as $file) {
+            @unlink($file);
+        }
+
+        $fileContent = file_get_contents($tempDocx);
+        @unlink($tempDocx);
+
+        return response($fileContent, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'Content-Disposition' => 'attachment; filename="contrato-' . $contrato->numero . '.docx"',
+        ]);
+    }
+
+    private function saveBase64ToTempFile(?string $dataUri): ?string
+    {
+        if (!$dataUri) return null;
+        if (preg_match('/^data:image\/(\w+);base64,/', $dataUri, $type)) {
+            $data = substr($dataUri, strpos($dataUri, ',') + 1);
+            $type = strtolower($type[1]);
+            if (!in_array($type, ['jpg', 'jpeg', 'gif', 'png'])) {
+                $type = 'png';
+            }
+            $data = base64_decode($data);
+            if ($data === false) return null;
+
+            $tempFile = tempnam(sys_get_temp_dir(), 'sig_') . '.' . $type;
+            file_put_contents($tempFile, $data);
+            return $tempFile;
+        } elseif (filter_var($dataUri, FILTER_VALIDATE_URL)) {
+            $content = @file_get_contents($dataUri);
+            if ($content) {
+                $tempFile = tempnam(sys_get_temp_dir(), 'sig_') . '.png';
+                file_put_contents($tempFile, $content);
+                return $tempFile;
+            }
+        }
+        return null;
     }
 
     public function guardarFirmas(Request $request, $id)
