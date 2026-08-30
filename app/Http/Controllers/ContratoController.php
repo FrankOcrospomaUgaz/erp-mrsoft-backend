@@ -304,11 +304,21 @@ class ContratoController extends Controller
         $fechaInicioContrato = Carbon::parse($contrato->fecha_inicio);
         $fechaFinContrato = Carbon::parse($contrato->fecha_fin);
         $fechaContrato = $fechaInicioContrato->copy()->subDay();
-        $mesesCantidad = $contrato->vigencia_contrato === 'anual'
-            ? ((int) ($contrato->duracion_anios ?: 1) * 12)
-            : 6;
+        $diasDiff = $fechaFinContrato->diffInDays($fechaInicioContrato) + 1;
+        $mesesCalculados = max(1, (int) round($diasDiff / 30.4375));
+        $mesesCantidad = $cuotas->count() > 0 ? $cuotas->count() : $mesesCalculados;
         $mesesTexto = match ($mesesCantidad) {
+            1 => 'un (1)',
+            2 => 'dos (2)',
+            3 => 'tres (3)',
+            4 => 'cuatro (4)',
+            5 => 'cinco (5)',
             6 => 'seis (6)',
+            7 => 'siete (7)',
+            8 => 'ocho (8)',
+            9 => 'nueve (9)',
+            10 => 'diez (10)',
+            11 => 'once (11)',
             12 => 'doce (12)',
             24 => 'veinticuatro (24)',
             36 => 'treinta y seis (36)',
