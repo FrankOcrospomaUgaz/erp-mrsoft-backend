@@ -34,24 +34,45 @@
 <body>
     @php
         $brandMap = [
-            'hotelhub' => 'HotelHUB',
-            'gesrest' => 'Gesrest',
-            '360sys' => '360Sys',
+            'hotelhub' => 'HOTELHUB',
+            'gesrest' => 'GESREST',
+            '360sys' => '360SYS',
+        ];
+        $serviceCategoryMap = [
+            'gesrest' => 'Gestión de Restaurantes',
+            'hotelhub' => 'Alojamiento',
+            '360sys' => 'Gestión Comercial',
+        ];
+        $serviceUrlMap = [
+            'gesrest' => 'https://www.gesrest.net',
+            'hotelhub' => 'https://hotelhub.com.pe',
+            '360sys' => 'https://garzasoft.com',
         ];
         $empresaCliente = $jerarquia['empresa'] ?? $jerarquia['root'];
-        $nombreEmisor = strtoupper($facturador->nombre_comercial ?? $facturador->razon_social ?? 'GARZASOFT EIRL');
-        $rucEmisor = $facturador->ruc ?? '20602871119';
-        $direccionEmisor = $facturador->direccion ?? 'Calle Nicolas la Torre 126 Urb. Magisterial, Chiclayo, Lambayeque';
+        $nombreEmisor = 'GARZASOFT E.I.R.L.';
+        $rucEmisor = '20602871119';
+        $direccionEmisor = 'Nicolás La Torre 126 - Urb. Magisterial - Chiclayo - Lambayeque';
         $representanteEmisor = 'AMPUERO PASCO GILBERTO MARTIN';
         $dniRepresentanteEmisor = '16734323';
         $nombreCliente = strtoupper($cliente->razon_social ?? $empresaCliente->razon_social ?? $cliente->nombre_comercial ?? $empresaCliente->nombre_comercial ?? 'CLIENTE');
         $rucCliente = $cliente->ruc ?: ($empresaCliente->ruc ?? 'N/D');
         $representanteCliente = strtoupper($cliente->dueno_nombre ?? $empresaCliente->dueno_nombre ?? 'SIN REPRESENTANTE');
         $dniCliente = $cliente->contactos_clientes[0]->dni ?? $empresaCliente->contactos_clientes[0]->dni ?? 'N/D';
-        $productoPrincipalRaw = $modulosAgrupados->first()['producto'] ?? strtoupper($tipoContratoDescripcion);
-        $productoPrincipal = $brandMap[strtolower($productoPrincipalRaw)] ?? $productoPrincipalRaw;
+        $productoPrincipalRaw = $modulosAgrupados->first()['producto'] ?? strtoupper($tipoContratoDescripcion ?? 'GESREST');
+        $productoKey = strtolower($productoPrincipalRaw);
+        if (str_contains($productoKey, 'gesrest')) {
+            $productoKey = 'gesrest';
+        } elseif (str_contains($productoKey, 'hotelhub')) {
+            $productoKey = 'hotelhub';
+        } elseif (str_contains($productoKey, '360sys')) {
+            $productoKey = '360sys';
+        }
+        $productoPrincipal = $brandMap[$productoKey] ?? strtoupper($productoPrincipalRaw);
+        $categoriaServicio = $serviceCategoryMap[$productoKey] ?? 'Gestión de Restaurantes';
+        $servicioCompleto = $categoriaServicio . ' ' . $productoPrincipal;
+        $urlPlataforma = $serviceUrlMap[$productoKey] ?? 'https://www.gesrest.net';
         $periodicidadPago = $contrato->periodicidad_cuota === 'anual' ? 'anual' : 'mensual';
-        $descripcionServicio = 'Pago ' . strtoupper($periodicidadPago === 'anual' ? 'ANUAL' : 'MENSUAL') . ' por servicio de plataforma de software para alojamiento ' . $productoPrincipal;
+        $descripcionServicio = 'Pago ' . strtoupper($periodicidadPago === 'anual' ? 'ANUAL' : 'MENSUAL') . ' por servicio de plataforma de software para ' . $servicioCompleto;
         $baseServicio = collect($contrato->contratoProductoModulos)->sum('precio');
         $cuotas = $contrato->cuotas->sortBy('fecha_vencimiento')->values();
         $fechaInicioContrato = \Carbon\Carbon::parse($contrato->fecha_inicio);
@@ -108,12 +129,12 @@
 
     <div class="title-number">CONTRATO N&deg; {{ $contrato->numero }}</div>
     <div class="title">CONTRATO DEL SERVICIO DE ARRENDAMIENTO DE LA PLATAFORMA DE SOFTWARE PARA</div>
-    <div class="title">ALOJAMIENTO {{ strtoupper($productoPrincipal) }}</div>
+    <div class="title">{{ strtoupper($servicioCompleto) }}</div>
 
     <div class="contract-body">
         <p>
             Conste por el presente documento el contrato del servicio de arrendamiento de la plataforma de software
-            para alojamiento {{ $productoPrincipal }}, que celebran de una parte <strong>{{ $nombreEmisor }}</strong>
+            para {{ $servicioCompleto }}, que celebran de una parte <strong>{{ $nombreEmisor }}</strong>
             con RUC N&deg; <strong>{{ $rucEmisor }}</strong>, domicilio en {{ $direccionEmisor }}, y debidamente representada
             por su representante legal quien firma el presente documento, <strong>{{ $representanteEmisor }}</strong> con
             DNI {{ $dniRepresentanteEmisor }}, en adelante <strong>EL ARRENDADOR</strong> y de otra parte
@@ -126,7 +147,7 @@
             <div class="clause-title">CLAUSULA PRIMERA: ANTECEDENTES</div>
             <p>
                 Con fecha {{ $fechaContrato->format('d-m-Y') }}, <strong>EL ARRENDADOR</strong> envio la cotizacion para
-                el Arrendamiento de la plataforma de software para alojamiento {{ $productoPrincipal }} para
+                el Arrendamiento de la plataforma de software para {{ $servicioCompleto }} para
                 <strong>EL CLIENTE</strong>, cuyos detalles y totales, se detallan a continuacion:
             </p>
 
@@ -143,7 +164,7 @@
                 <tbody>
                     <tr>
                         <td class="text-center">01</td>
-                        <td>Pago instalacion del servicio de plataforma de software para alojamiento {{ $productoPrincipal }}</td>
+                        <td>Pago instalacion del servicio de plataforma de software para {{ $servicioCompleto }}</td>
                         <td class="text-center">S/ {{ number_format($costoInstalacion, 2, '.', '') }}</td>
                         <td class="text-center">1</td>
                         <td class="text-center">S/ {{ number_format($costoInstalacion, 2, '.', '') }}</td>
@@ -166,7 +187,7 @@
             <div class="clause-title">CLAUSULA SEGUNDA: OBJETO</div>
             <p>
                 El presente proceso contrato tiene por objeto el Arrendamiento de la plataforma de software para
-                alojamiento {{ $productoPrincipal }} para <strong>EL CLIENTE</strong>.
+                {{ $servicioCompleto }} para <strong>EL CLIENTE</strong>.
             </p>
             <ul>
                 @foreach($contrato->contratoProductoModulos as $item)
@@ -281,17 +302,17 @@ Cuenta CCI en soles
             <div class="clause-title">CLAUSULA OCTAVA: RESPONSABILIDADES DE EL ARRENDADOR Y EL CLIENTE</div>
             <p><strong>EL ARRENDADOR</strong> tendra las siguientes responsabilidades:</p>
             <ul>
-                <li>Instalar y configurar la plataforma de software para alojamiento {{ $productoPrincipal }} en los equipos que indique EL CLIENTE para los modulos contratados.</li>
+                <li>Instalar y configurar la plataforma de software para {{ $servicioCompleto }} en los equipos que indique EL CLIENTE para los modulos contratados.</li>
                 <li>Ofrecer un nivel de atencion de servicio ante fallas, no mayor a cuarenta y ocho (48) horas de reportado el incidente, en horario de lunes a sabado de 09:00 a 18:00 horas.</li>
-                <li>Poner a disposicion del cliente la URL https://hotelhub.com.pe para uso de la plataforma de software para alojamiento {{ $productoPrincipal }}.</li>
+                <li>Poner a disposicion del cliente la URL {{ $urlPlataforma }} para uso de la plataforma de software para {{ $servicioCompleto }}.</li>
                 <li>Poner a disposicion del cliente la URL https://comprobante-e.com para consulta de sus clientes de los comprobantes electronicos de venta emitidos y consulta del contador en rango de fechas.</li>
-                <li>Almacenar en su servidor los datos resultado del uso de la plataforma de software para alojamiento {{ $productoPrincipal }} por el plazo de duracion de este contrato.</li>
+                <li>Almacenar en su servidor los datos resultado del uso de la plataforma de software para {{ $servicioCompleto }} por el plazo de duracion de este contrato.</li>
                 <li>Cuando EL CLIENTE tenga retraso en el pago, EL ARRENDADOR puede suspender el servicio, sin perjuicio de aplicar las penalidades que correspondan.</li>
             </ul>
 
             <p><strong>EL CLIENTE</strong> tendra las siguientes responsabilidades:</p>
             <ul>
-                <li>Contar con una conexion a Internet adecuada que asegure la correcta operacion de la plataforma de software para alojamiento {{ $productoPrincipal }}.</li>
+                <li>Contar con una conexion a Internet adecuada que asegure la correcta operacion de la plataforma de software para {{ $servicioCompleto }}.</li>
                 <li>Informar con un plazo no mayor a veinticuatro (24) horas sobre incidencias en el funcionamiento de la plataforma que impidan su correcto funcionamiento.</li>
                 <li>Garantizar y custodiar el correcto funcionamiento de los equipos de computo como computadoras e impresoras que garanticen el funcionamiento de la plataforma.</li>
                 <li>Realizar el pago por el servicio dentro de los plazos establecidos en la Clausula Tercera de este contrato.</li>

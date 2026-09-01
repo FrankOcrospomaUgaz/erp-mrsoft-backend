@@ -279,14 +279,24 @@ class ContratoController extends Controller
         $firmaCliente = $contrato->firma_cliente ?? null;
 
         $brandMap = [
-            'hotelhub' => 'HotelHUB',
-            'gesrest' => 'Gesrest',
-            '360sys' => '360Sys',
+            'hotelhub' => 'HOTELHUB',
+            'gesrest' => 'GESREST',
+            '360sys' => '360SYS',
+        ];
+        $serviceCategoryMap = [
+            'gesrest' => 'Gestión de Restaurantes',
+            'hotelhub' => 'Alojamiento',
+            '360sys' => 'Gestión Comercial',
+        ];
+        $serviceUrlMap = [
+            'gesrest' => 'https://www.gesrest.net',
+            'hotelhub' => 'https://hotelhub.com.pe',
+            '360sys' => 'https://garzasoft.com',
         ];
         $empresaCliente = $jerarquia['empresa'] ?? $jerarquia['root'];
-        $nombreEmisor = strtoupper($facturador->nombre_comercial ?? $facturador->razon_social ?? 'GARZASOFT EIRL');
-        $rucEmisor = $facturador->ruc ?? '20602871119';
-        $direccionEmisor = $facturador->direccion ?? 'Calle Nicolas la Torre 126 Urb. Magisterial, Chiclayo, Lambayeque';
+        $nombreEmisor = 'GARZASOFT E.I.R.L.';
+        $rucEmisor = '20602871119';
+        $direccionEmisor = 'Nicolás La Torre 126 - Urb. Magisterial - Chiclayo - Lambayeque';
         $representanteEmisor = 'AMPUERO PASCO GILBERTO MARTIN';
         $dniRepresentanteEmisor = '16734323';
         $nombreCliente = strtoupper($cliente->razon_social ?? $empresaCliente->razon_social ?? $cliente->nombre_comercial ?? $empresaCliente->nombre_comercial ?? 'CLIENTE');
@@ -295,10 +305,21 @@ class ContratoController extends Controller
         $dniCliente = $cliente->contactos_clientes[0]->dni ?? $empresaCliente->contactos_clientes[0]->dni ?? 'N/D';
 
         $tipoContratoDesc = $this->resolveContractTypeDescription($contrato->tipo_contrato);
-        $productoPrincipalRaw = $modulosAgrupados->first()['producto'] ?? strtoupper($tipoContratoDesc);
-        $productoPrincipal = $brandMap[strtolower($productoPrincipalRaw)] ?? $productoPrincipalRaw;
+        $productoPrincipalRaw = $modulosAgrupados->first()['producto'] ?? strtoupper($tipoContratoDesc ?? 'GESREST');
+        $productoKey = strtolower($productoPrincipalRaw);
+        if (str_contains($productoKey, 'gesrest')) {
+            $productoKey = 'gesrest';
+        } elseif (str_contains($productoKey, 'hotelhub')) {
+            $productoKey = 'hotelhub';
+        } elseif (str_contains($productoKey, '360sys')) {
+            $productoKey = '360sys';
+        }
+        $productoPrincipal = $brandMap[$productoKey] ?? strtoupper($productoPrincipalRaw);
+        $categoriaServicio = $serviceCategoryMap[$productoKey] ?? 'Gestión de Restaurantes';
+        $servicioCompleto = $categoriaServicio . ' ' . $productoPrincipal;
+        $urlPlataforma = $serviceUrlMap[$productoKey] ?? 'https://www.gesrest.net';
         $periodicidadPago = $contrato->periodicidad_cuota === 'anual' ? 'anual' : 'mensual';
-        $descripcionServicio = 'Pago ' . strtoupper($periodicidadPago === 'anual' ? 'ANUAL' : 'MENSUAL') . ' por servicio de plataforma de software para alojamiento ' . $productoPrincipal;
+        $descripcionServicio = 'Pago ' . strtoupper($periodicidadPago === 'anual' ? 'ANUAL' : 'MENSUAL') . ' por servicio de plataforma de software para ' . $servicioCompleto;
         $baseServicio = collect($contrato->contratoProductoModulos)->sum('precio');
         $cuotas = $contrato->cuotas->sortBy('fecha_vencimiento')->values();
         $fechaInicioContrato = Carbon::parse($contrato->fecha_inicio);
@@ -364,12 +385,12 @@ class ContratoController extends Controller
         // Encabezado
         $section->addText('CONTRATO N° ' . $contrato->numero, $fTitle, $pCenter);
         $section->addText('CONTRATO DEL SERVICIO DE ARRENDAMIENTO DE LA PLATAFORMA DE SOFTWARE PARA', $fTitleUnderline, $pCenter);
-        $section->addText('ALOJAMIENTO ' . strtoupper($productoPrincipal), $fTitleUnderline, $pCenter);
+        $section->addText(strtoupper($servicioCompleto), $fTitleUnderline, $pCenter);
         $section->addTextBreak(1);
 
         // Preámbulo
         $pIntro = $section->addTextRun($pJustify);
-        $pIntro->addText('Conste por el presente documento el contrato del servicio de arrendamiento de la plataforma de software para alojamiento ' . $productoPrincipal . ', que celebran de una parte ');
+        $pIntro->addText('Conste por el presente documento el contrato del servicio de arrendamiento de la plataforma de software para ' . $servicioCompleto . ', que celebran de una parte ');
         $pIntro->addText($nombreEmisor, $fBold);
         $pIntro->addText(' con RUC N° ');
         $pIntro->addText($rucEmisor, $fBold);
@@ -394,7 +415,7 @@ class ContratoController extends Controller
         $pCl1 = $section->addTextRun($pJustify);
         $pCl1->addText('Con fecha ' . $fechaContrato->format('d-m-Y') . ', ');
         $pCl1->addText('EL ARRENDADOR', $fBold);
-        $pCl1->addText(' envió la cotización para el Arrendamiento de la plataforma de software para alojamiento ' . $productoPrincipal . ' para ');
+        $pCl1->addText(' envió la cotización para el Arrendamiento de la plataforma de software para ' . $servicioCompleto . ' para ');
         $pCl1->addText('EL CLIENTE', $fBold);
         $pCl1->addText(', cuyos detalles y totales, se detallan a continuación:');
 
@@ -422,7 +443,7 @@ class ContratoController extends Controller
 
         $table->addRow();
         $table->addCell(800)->addText('01', $fNormal, ['alignment' => Jc::CENTER]);
-        $table->addCell(4600)->addText('Pago instalación del servicio de plataforma de software para alojamiento ' . $productoPrincipal, $fNormal);
+        $table->addCell(4600)->addText('Pago instalación del servicio de plataforma de software para ' . $servicioCompleto, $fNormal);
         $table->addCell(1400)->addText('S/ ' . number_format($costoInstalacion, 2, '.', ''), $fNormal, ['alignment' => Jc::CENTER]);
         $table->addCell(1000)->addText('1', $fNormal, ['alignment' => Jc::CENTER]);
         $table->addCell(1400)->addText('S/ ' . number_format($costoInstalacion, 2, '.', ''), $fNormal, ['alignment' => Jc::CENTER]);
@@ -441,7 +462,7 @@ class ContratoController extends Controller
         // CLÁUSULA SEGUNDA
         $section->addText('CLÁUSULA SEGUNDA: OBJETO', $fClauseTitle, ['spaceBefore' => 120, 'spaceAfter' => 40]);
         $pCl2 = $section->addTextRun($pJustify);
-        $pCl2->addText('El presente proceso contrato tiene por objeto el Arrendamiento de la plataforma de software para alojamiento ' . $productoPrincipal . ' para ');
+        $pCl2->addText('El presente proceso contrato tiene por objeto el Arrendamiento de la plataforma de software para ' . $servicioCompleto . ' para ');
         $pCl2->addText('EL CLIENTE', $fBold);
         $pCl2->addText('.');
 
@@ -455,6 +476,7 @@ class ContratoController extends Controller
         $pCl3->addText('El monto total del arrendamiento materia del presente contrato asciende a ');
         $pCl3->addText('S/ ' . number_format((float) $contrato->total, 2, '.', '') . ' (' . $montoTotalLetras . ')', $fBold);
         $pCl3->addText(', incluido el IGV, ');
+
         if ($contrato->forma_pago === 'parcial') {
             $primeraCuota = (float) ($cuotas->first()->monto ?? 0);
             $restoCuotas = $cuotas->slice(1);
@@ -524,17 +546,17 @@ class ContratoController extends Controller
         $pCl8_1 = $section->addTextRun($pJustify);
         $pCl8_1->addText('EL ARRENDADOR', $fBold);
         $pCl8_1->addText(' tendrá las siguientes responsabilidades:');
-        $section->addListItem('Instalar y configurar la plataforma de software para alojamiento ' . $productoPrincipal . ' en los equipos que indique EL CLIENTE para los módulos contratados.', 0, $fNormal, ['listType' => ListItem::TYPE_BULLET_FILLED], ['spaceAfter' => 20]);
+        $section->addListItem('Instalar y configurar la plataforma de software para ' . $servicioCompleto . ' en los equipos que indique EL CLIENTE para los módulos contratados.', 0, $fNormal, ['listType' => ListItem::TYPE_BULLET_FILLED], ['spaceAfter' => 20]);
         $section->addListItem('Ofrecer un nivel de atención de servicio ante fallas, no mayor a cuarenta y ocho (48) horas de reportado el incidente, en horario de lunes a sábado de 09:00 a 18:00 horas.', 0, $fNormal, ['listType' => ListItem::TYPE_BULLET_FILLED], ['spaceAfter' => 20]);
-        $section->addListItem('Poner a disposición del cliente la URL https://hotelhub.com.pe para uso de la plataforma de software para alojamiento ' . $productoPrincipal . '.', 0, $fNormal, ['listType' => ListItem::TYPE_BULLET_FILLED], ['spaceAfter' => 20]);
+        $section->addListItem('Poner a disposición del cliente la URL ' . $urlPlataforma . ' para uso de la plataforma de software para ' . $servicioCompleto . '.', 0, $fNormal, ['listType' => ListItem::TYPE_BULLET_FILLED], ['spaceAfter' => 20]);
         $section->addListItem('Poner a disposición del cliente la URL https://comprobante-e.com para consulta de sus clientes de los comprobantes electrónicos de venta emitidos y consulta del contador en rango de fechas.', 0, $fNormal, ['listType' => ListItem::TYPE_BULLET_FILLED], ['spaceAfter' => 20]);
-        $section->addListItem('Almacenar en su servidor los datos resultado del uso de la plataforma de software para alojamiento ' . $productoPrincipal . ' por el plazo de duración de este contrato.', 0, $fNormal, ['listType' => ListItem::TYPE_BULLET_FILLED], ['spaceAfter' => 20]);
+        $section->addListItem('Almacenar en su servidor los datos resultado del uso de la plataforma de software para ' . $servicioCompleto . ' por el plazo de duración de este contrato.', 0, $fNormal, ['listType' => ListItem::TYPE_BULLET_FILLED], ['spaceAfter' => 20]);
         $section->addListItem('Cuando EL CLIENTE tenga retraso en el pago, EL ARRENDADOR puede suspender el servicio, sin perjuicio de aplicar las penalidades que correspondan.', 0, $fNormal, ['listType' => ListItem::TYPE_BULLET_FILLED], ['spaceAfter' => 40]);
 
         $pCl8_2 = $section->addTextRun($pJustify);
         $pCl8_2->addText('EL CLIENTE', $fBold);
         $pCl8_2->addText(' tendrá las siguientes responsabilidades:');
-        $section->addListItem('Contar con una conexión a Internet adecuada que asegure la correcta operación de la plataforma de software para alojamiento ' . $productoPrincipal . '.', 0, $fNormal, ['listType' => ListItem::TYPE_BULLET_FILLED], ['spaceAfter' => 20]);
+        $section->addListItem('Contar con una conexión a Internet adecuada que asegure la correcta operación de la plataforma de software para ' . $servicioCompleto . '.', 0, $fNormal, ['listType' => ListItem::TYPE_BULLET_FILLED], ['spaceAfter' => 20]);
         $section->addListItem('Informar con un plazo no mayor a veinticuatro (24) horas sobre incidencias en el funcionamiento de la plataforma que impidan su correcto funcionamiento.', 0, $fNormal, ['listType' => ListItem::TYPE_BULLET_FILLED], ['spaceAfter' => 20]);
         $section->addListItem('Garantizar y custodiar el correcto funcionamiento de los equipos de cómputo como computadoras e impresoras que garanticen el funcionamiento de la plataforma.', 0, $fNormal, ['listType' => ListItem::TYPE_BULLET_FILLED], ['spaceAfter' => 20]);
         $section->addListItem('Realizar el pago por el servicio dentro de los plazos establecidos en la Cláusula Tercera de este contrato.', 0, $fNormal, ['listType' => ListItem::TYPE_BULLET_FILLED], ['spaceAfter' => 40]);
