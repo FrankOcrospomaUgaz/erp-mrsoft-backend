@@ -1,6 +1,7 @@
 @php
     $formato = $producto->formato_alta ?? [];
     $htmlContent = $formato['html_content'] ?? null;
+    $paperSize = $formato['paper_size'] ?? 'letter';
 @endphp
 
 @if(!empty($htmlContent))
@@ -11,7 +12,7 @@
     <title>Formato de Alta - {{ $producto->nombre }}</title>
     <style>
         @page {
-            size: A4 portrait;
+            size: {{ $paperSize === 'a4' ? 'A4 portrait' : 'letter portrait' }};
             margin: 0;
         }
         * {
@@ -27,7 +28,7 @@
         }
         .a4-page-sheet {
             width: 100%;
-            min-height: 1050px;
+            min-height: {{ $paperSize === 'a4' ? '1050px' : '980px' }};
             position: relative;
             background: #ffffff;
             box-sizing: border-box;
