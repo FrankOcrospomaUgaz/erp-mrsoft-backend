@@ -28,14 +28,29 @@
         }
         .a4-page-sheet {
             width: 100%;
-            min-height: {{ $paperSize === 'a4' ? '1050px' : '980px' }};
+            height: {{ $paperSize === 'a4' ? '296mm' : '278mm' }};
+            max-height: {{ $paperSize === 'a4' ? '296mm' : '278mm' }};
             position: relative;
             background: #ffffff;
             box-sizing: border-box;
+            page-break-after: always;
             page-break-inside: avoid;
+            overflow: hidden;
         }
-        .a4-page-sheet + .a4-page-sheet {
-            page-break-before: always;
+        .a4-page-sheet:last-child {
+            page-break-after: avoid !important;
+        }
+        img, .page-content img {
+            max-width: 100%;
+            height: auto;
+        }
+        .a4-page-sheet > img {
+            width: 100% !important;
+            height: 100% !important;
+            display: block !important;
+            object-fit: contain !important;
+            margin: 0 !important;
+            padding: 0 !important;
         }
         h1, h2, h3 {
             color: #eb5454;
