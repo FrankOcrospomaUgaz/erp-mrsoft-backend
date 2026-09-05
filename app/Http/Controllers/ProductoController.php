@@ -309,8 +309,11 @@ class ProductoController extends Controller
             'datosCliente' => $datosCliente,
         ];
 
+        $formato = $producto->formato_alta ?: [];
+        $paperSize = strtolower($formato['paper_size'] ?? 'letter');
+
         $pdf = Pdf::loadView('pdf.formato_alta', $data)
-            ->setPaper('a4', 'portrait')
+            ->setPaper($paperSize, 'portrait')
             ->setOption('isRemoteEnabled', true)
             ->setOption('isHtml5ParserEnabled', true)
             ->setOption('dpi', 96)
@@ -329,6 +332,7 @@ class ProductoController extends Controller
         $nombre = $producto->nombre;
 
         return [
+            'paper_size' => 'letter',
             'portada' => [
                 'slogan' => 'Tu restaurante digital',
                 'telefono_soporte' => '+51 979 293 176',

@@ -90,6 +90,7 @@
     <title>Formato de Alta - {{ $producto->nombre }}</title>
     <style>
         @page {
+            size: letter portrait;
             margin: 30px 45px 40px 45px;
         }
         body {
