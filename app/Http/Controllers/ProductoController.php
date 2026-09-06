@@ -105,6 +105,8 @@ class ProductoController extends Controller
                 'nombre' => $request->input('nombre'),
                 'tipo' => $this->normalizeTipo($request->input('tipo')),
                 'descripcion' => $request->input('descripcion'),
+                'color' => $request->input('color'),
+                'logo' => $request->input('logo'),
             ]);
 
             foreach ($request->input('modulos', []) as $modulo) {
@@ -156,6 +158,8 @@ class ProductoController extends Controller
                 'nombre' => $request->input('nombre'),
                 'tipo' => $this->normalizeTipo($request->input('tipo')),
                 'descripcion' => $request->input('descripcion'),
+                'color' => $request->input('color'),
+                'logo' => $request->input('logo'),
             ]);
 
             $producto->modulos()->delete();
@@ -206,6 +210,8 @@ class ProductoController extends Controller
             'nombre' => 'required|string|max:255',
             'tipo' => 'required|in:servicio,producto',
             'descripcion' => 'nullable|string',
+            'color' => 'nullable|string|max:50',
+            'logo' => 'nullable|string',
             'modulos' => 'nullable|array',
             'modulos.*.nombre' => 'required|string|max:255',
             'modulos.*.descripcion_contrato' => 'nullable|string',

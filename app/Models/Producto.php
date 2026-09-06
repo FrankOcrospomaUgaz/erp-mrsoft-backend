@@ -38,6 +38,8 @@ class Producto extends Model
 		'tipo',
 		'descripcion',
 		'formato_alta',
+		'color',
+		'logo',
 	];
 
 	protected $casts = [

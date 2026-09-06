@@ -53,7 +53,6 @@
             padding: 0 !important;
         }
         h1, h2, h3 {
-            color: #eb5454;
             font-family: Helvetica, Arial, sans-serif;
             font-weight: 700;
             text-transform: uppercase;

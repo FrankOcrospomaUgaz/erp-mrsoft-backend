@@ -45,6 +45,8 @@ class ContratoResource extends JsonResource
                         'producto' => ($cpm->relationLoaded('producto') && $cpm->producto) ? [
                             'id'     => $cpm->producto->id,
                             'nombre' => $cpm->producto->nombre ?? null,
+                            'color'  => $cpm->producto->color ?? null,
+                            'logo'   => $cpm->producto->logo ?? null,
                         ] : null,
 
                         // Datos del módulo (lo que te piden)
