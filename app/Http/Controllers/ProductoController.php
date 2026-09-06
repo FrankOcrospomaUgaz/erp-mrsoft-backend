@@ -233,6 +233,17 @@ class ProductoController extends Controller
         ];
     }
 
+    private function mapModuloPayload(array $modulo): array
+    {
+        return [
+            'nombre' => $modulo['nombre'] ?? '',
+            'descripcion_contrato' => $modulo['descripcion_contrato'] ?? null,
+            'precio_unitario' => $modulo['precio_unitario'] ?? $modulo['precio_mensual'] ?? 0,
+            'precio_mensual' => $modulo['precio_mensual'] ?? 0,
+            'precio_anual' => $modulo['precio_anual'] ?? 0,
+        ];
+    }
+
     public function getFormatoAlta($id)
     {
         $producto = Producto::find($id);
