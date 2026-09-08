@@ -855,11 +855,14 @@ class ContratoController extends Controller
             ], 404);
         }
 
-        if ($contrato->estado === 'anulado') {
+        // Si el contrato ya está anulado o se solicita eliminación directa, eliminarlo (soft-delete)
+        if ($contrato->estado === 'anulado' || $request->boolean('force')) {
+            $contrato->delete();
+
             return response()->json([
-                'status' => 422,
-                'message' => 'El contrato ya se encuentra anulado.',
-            ], 422);
+                'status' => 200,
+                'message' => 'Contrato eliminado correctamente',
+            ], 200);
         }
 
         $validator = Validator::make($request->all(), [
