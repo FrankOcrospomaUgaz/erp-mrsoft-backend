@@ -77,6 +77,9 @@ class CuotaController extends Controller
             $query->whereHas('contrato', fn ($q) => $q->whereIn('cliente_id', $targetClienteIds));
         }
 
+        // 📅 Ordenamiento por defecto: de la más próxima a vencer a la más lejana
+        $query->orderBy('fecha_vencimiento', 'asc');
+
         $cuotas = $query->paginate($request->get('per_page', 10));
 
         return response()->json([
