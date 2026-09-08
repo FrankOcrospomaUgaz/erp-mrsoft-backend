@@ -54,11 +54,11 @@ class ContratoProductoModulo extends Model
 
 	public function producto()
 	{
-		return $this->belongsTo(Producto::class);
+		return $this->belongsTo(Producto::class)->withTrashed();
 	}
 
 	public function modulo()
 	{
-		return $this->belongsTo(Modulo::class);
+		return $this->belongsTo(Modulo::class)->withTrashed();
 	}
 }

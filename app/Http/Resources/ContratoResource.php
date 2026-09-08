@@ -35,26 +35,27 @@ class ContratoResource extends JsonResource
 
             'contrato_producto_modulos' => $this->whenLoaded('contratoProductoModulos', function () {
                 return $this->contratoProductoModulos->map(function ($cpm) {
+                    $producto = $cpm->producto;
+                    $modulo = $cpm->modulo;
+
                     return [
                         'id'          => $cpm->id,
                         'precio'      => $cpm->precio,
                         'producto_id' => $cpm->producto_id,
                         'modulo_id'   => $cpm->modulo_id,
 
-                        // Datos del producto (si lo cargaste)
-                        'producto' => ($cpm->relationLoaded('producto') && $cpm->producto) ? [
-                            'id'     => $cpm->producto->id,
-                            'nombre' => $cpm->producto->nombre ?? null,
-                            'color'  => $cpm->producto->color ?? null,
-                            'logo'   => $cpm->producto->logo ?? null,
+                        'producto' => $producto ? [
+                            'id'     => $producto->id,
+                            'nombre' => $producto->nombre ?? null,
+                            'color'  => $producto->color ?? null,
+                            'logo'   => $producto->logo ?? null,
                         ] : null,
 
-                        // Datos del módulo (lo que te piden)
-                        'modulo' => ($cpm->relationLoaded('modulo') && $cpm->modulo) ? [
-                            'id'              => $cpm->modulo->id,
-                            'nombre'          => $cpm->modulo->nombre ?? null,
-                            'precio_unitario' => $cpm->modulo->precio_unitario ?? null,
-                            'producto_id'     => $cpm->modulo->producto_id ?? null,
+                        'modulo' => $modulo ? [
+                            'id'              => $modulo->id,
+                            'nombre'          => $modulo->nombre ?? null,
+                            'precio_unitario' => $modulo->precio_unitario ?? null,
+                            'producto_id'     => $modulo->producto_id ?? null,
                         ] : null,
                     ];
                 });
