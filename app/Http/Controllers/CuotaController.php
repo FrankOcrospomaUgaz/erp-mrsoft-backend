@@ -70,6 +70,13 @@ class CuotaController extends Controller
             $query->where('contrato_id', $request->get('contrato_id'));
         }
 
+        // 🏢 Filtro por cliente específico
+        if ($request->filled('cliente_id')) {
+            $filterClienteId = (int) $request->get('cliente_id');
+            $targetClienteIds = $this->getAllSubClientIds($filterClienteId);
+            $query->whereHas('contrato', fn ($q) => $q->whereIn('cliente_id', $targetClienteIds));
+        }
+
         $cuotas = $query->paginate($request->get('per_page', 10));
 
         return response()->json([
@@ -286,6 +293,26 @@ class CuotaController extends Controller
 
         $ids = [(int) $clienteId];
         $pending = [(int) $clienteId];
+
+        while (!empty($pending)) {
+            $children = Cliente::query()
+                ->whereIn('parent_cliente_id', $pending)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+
+            $children = array_values(array_diff($children, $ids));
+            $ids = array_values(array_unique(array_merge($ids, $children)));
+            $pending = $children;
+        }
+
+        return $ids;
+    }
+
+    private function getAllSubClientIds(int $clienteId): array
+    {
+        $ids = [$clienteId];
+        $pending = [$clienteId];
 
         while (!empty($pending)) {
             $children = Cliente::query()
