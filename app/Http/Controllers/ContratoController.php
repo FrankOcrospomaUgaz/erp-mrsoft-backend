@@ -737,7 +737,7 @@ class ContratoController extends Controller
                 $contrato->contratoProductoModulos()->createMany($productosModulos);
             }
 
-            if ($request->input('forma_pago') === 'parcial') {
+            if ($request->has('cuotas')) {
                 $cuotas = $this->mapCuotas($request->input('cuotas', []));
                 if (!empty($cuotas)) {
                     $contrato->cuotas()->createMany($cuotas);
@@ -807,10 +807,7 @@ class ContratoController extends Controller
                 }
             }
 
-            $formaPago = $request->input('forma_pago', $contrato->forma_pago);
-            if ($formaPago === 'unico') {
-                $contrato->cuotas()->delete();
-            } elseif ($request->has('cuotas')) {
+            if ($request->has('cuotas')) {
                 $contrato->cuotas()->delete();
                 $cuotas = $this->mapCuotas($request->input('cuotas', []));
                 if (!empty($cuotas)) {
