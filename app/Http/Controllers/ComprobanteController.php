@@ -27,7 +27,7 @@ class ComprobanteController extends Controller
         $perPage = (int) $request->get('per_page', 10);
         $clienteIds = $this->accessibleClienteIds($request);
 
-        $query = Comprobante::with(['cliente.contactos_clientes', 'detalles'])
+        $query = Comprobante::with(['cliente.contactos_clientes', 'detalles', 'facturador'])
             ->latest()
             ->when($clienteIds, fn ($query) => $query->whereIn('cliente_id', $clienteIds))
             ->when($search, function ($query, $search) {
@@ -111,11 +111,48 @@ class ComprobanteController extends Controller
 
         $emitido = $this->service->emitir($comprobante);
 
+        $status = $emitido->estado === 'X' ? 422 : 200;
+
         return response()->json([
-            'status' => 200,
-            'message' => $emitido->estado === 'X' ? 'Comprobante con error de emision' : 'Comprobante emitido correctamente',
+            'status' => $status,
+            'message' => $emitido->estado === 'X'
+                ? 'El facturador rechazo el comprobante: ' . $emitido->error_text
+                : 'Comprobante emitido correctamente',
             'data' => new ComprobanteResource($emitido),
-        ]);
+        ], $status);
+    }
+
+    public function update(Request $request, $id)
+    {
+        if ($request->user()?->cliente_id) {
+            return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
+        }
+
+        $comprobante = Comprobante::find($id);
+        if (!$comprobante) {
+            return response()->json(['status' => 404, 'message' => 'Comprobante no encontrado'], 404);
+        }
+
+        $validator = $this->validator($request->all());
+        if ($validator->fails()) {
+            return response()->json(['status' => 422, 'message' => 'Revisa los datos de la factura.', 'errors' => $validator->errors()], 422);
+        }
+
+        try {
+            $actualizado = $this->service->actualizar($comprobante, $validator->validated());
+
+            return response()->json([
+                'status' => 200,
+                'message' => 'Factura corregida. Ya puedes reenviarla.',
+                'data' => new ComprobanteResource($actualizado),
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'status' => 422,
+                'message' => collect($e->errors())->flatten()->first(),
+                'errors' => $e->errors(),
+            ], 422);
+        }
     }
 
     public function emisionMasiva(Request $request)
@@ -138,7 +175,7 @@ class ComprobanteController extends Controller
             'status' => 200,
             'message' => 'Proceso masivo terminado',
             'data' => collect($resultados)->map(function ($item) {
-                if (($item['ok'] ?? false) && isset($item['comprobante'])) {
+                if (isset($item['comprobante'])) {
                     $item['comprobante'] = new ComprobanteResource($item['comprobante']);
                 }
 
@@ -158,10 +195,12 @@ class ComprobanteController extends Controller
 
         foreach ($pendientes as $comprobante) {
             try {
+                $emitido = $this->service->emitir($comprobante);
                 $resultados[] = [
                     'id' => $comprobante->id,
-                    'ok' => true,
-                    'comprobante' => new ComprobanteResource($this->service->emitir($comprobante)),
+                    'ok' => $emitido->estado !== 'X',
+                    'message' => $emitido->estado === 'X' ? $emitido->error_text : null,
+                    'comprobante' => new ComprobanteResource($emitido),
                 ];
             } catch (\Throwable $e) {
                 $resultados[] = [
@@ -183,6 +222,11 @@ class ComprobanteController extends Controller
     public function downloadCdr(Request $request, $id)
     {
         return $this->downloadStoredFile($request, (int) $id, 'cdr_path', 'cdr-response.json');
+    }
+
+    public function downloadZip(Request $request, $id)
+    {
+        return $this->downloadStoredFile($request, (int) $id, 'zip_path', 'respuesta-sunat.zip');
     }
 
     public function pdf(Request $request, $id)
@@ -446,7 +490,30 @@ class ComprobanteController extends Controller
             return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
         }
 
-        if (!$comprobante || !$comprobante->{$field} || !Storage::disk('local')->exists($comprobante->{$field})) {
+        if (!$comprobante) {
+            return response()->json(['status' => 404, 'message' => 'Comprobante no encontrado'], 404);
+        }
+
+        if ($field === 'zip_path') {
+            $formattedName = $comprobante->serie . '-' . str_pad((string) $comprobante->correlativo, 6, '0', STR_PAD_LEFT) . '-SUNAT.zip';
+
+            if ($comprobante->zip_path && Storage::disk('local')->exists($comprobante->zip_path)) {
+                return Storage::disk('local')->download($comprobante->zip_path, $formattedName);
+            }
+
+            if (!empty($comprobante->sunat_response['fileZIPBASE64'])) {
+                $zip = base64_decode((string) $comprobante->sunat_response['fileZIPBASE64'], true);
+                if ($zip !== false) {
+                    $base = 'facturacion/' . $comprobante->serie . '-' . str_pad((string) $comprobante->correlativo, 6, '0', STR_PAD_LEFT);
+                    $path = $base . '/sunat.zip';
+                    Storage::disk('local')->put($path, $zip);
+                    $comprobante->update(['zip_path' => $path]);
+                    return Storage::disk('local')->download($path, $formattedName);
+                }
+            }
+        }
+
+        if (!$comprobante->{$field} || !Storage::disk('local')->exists($comprobante->{$field})) {
             return response()->json(['status' => 404, 'message' => 'Archivo no encontrado'], 404);
         }
 

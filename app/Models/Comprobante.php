@@ -34,6 +34,7 @@ class Comprobante extends Model
         'nombre_documento',
         'xml_path',
         'cdr_path',
+        'zip_path',
         'pdf_path',
         'error_code',
         'error_text',

@@ -10,6 +10,7 @@ return [
     'clave_sol' => env('FACTURACION_CLAVE_SOL'),
     'token' => env('FACTURACION_TOKEN'),
     'porcentaje_igv' => (float) env('FACTURACION_IGV', 18),
+    'timezone' => env('FACTURACION_TIMEZONE', 'America/Lima'),
     'wsdl' => [
         'factura' => env('FACTURACION_WSDL_FACTURA', 'http://157.245.85.164/facturacion/wsdl/wsdl_factura_rc.php'),
         'boleta' => env('FACTURACION_WSDL_BOLETA', 'http://157.245.85.164/facturacion/wsdl/wsdl_boleta_rc.php'),

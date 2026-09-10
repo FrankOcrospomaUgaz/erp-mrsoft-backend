@@ -20,7 +20,13 @@ class CuotaController extends Controller
     public function index(Request $request)
     {
         $clienteIds = $this->accessibleClienteIds($request);
-        $query = Cuota::with(['contrato.cliente', 'pagos_cuota'])
+        $query = Cuota::with([
+            'contrato.cliente',
+            'pagos_cuota',
+            'comprobante.cliente.contactos_clientes',
+            'comprobante.detalles',
+            'comprobante.facturador',
+        ])
             ->when($clienteIds, function ($query) use ($clienteIds) {
                 $query->whereHas('contrato', fn ($contrato) => $contrato->whereIn('cliente_id', $clienteIds));
             });
@@ -112,7 +118,10 @@ class CuotaController extends Controller
         // Cargar todas las relaciones necesarias
         $cuota->load([
             'contrato.cliente',
-            'pagos_cuota'
+            'pagos_cuota',
+            'comprobante.cliente.contactos_clientes',
+            'comprobante.detalles',
+            'comprobante.facturador',
         ]);
 
         if (!$this->canAccessCuota(request(), $cuota)) {
@@ -263,17 +272,92 @@ class CuotaController extends Controller
         try {
             $emitido = $service->emitir($comprobante);
 
+            $status = $emitido->estado === 'X' ? 422 : 200;
+
             return response()->json([
-                'status' => 200,
+                'status' => $status,
                 'message' => $emitido->estado === 'X'
-                    ? 'La factura se reenvio, pero SUNAT devolvio error.'
+                    ? 'El facturador rechazo el reenvio: ' . $emitido->error_text
                     : 'Factura reenviada correctamente.',
                 'data' => new ComprobanteResource($emitido),
-            ]);
+            ], $status);
         } catch (\Throwable $e) {
             return response()->json([
                 'status' => 500,
                 'message' => 'Error al reenviar la factura.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function generarFactura(Cuota $cuota, ComprobanteService $service)
+    {
+        if (request()->user()?->cliente_id) {
+            return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
+        }
+
+        try {
+            $resultado = DB::transaction(function () use ($cuota, $service) {
+                $cuotaBloqueada = Cuota::with('contrato.cliente')
+                    ->lockForUpdate()
+                    ->findOrFail($cuota->id);
+
+                $existente = Comprobante::withTrashed()
+                    ->where('cuota_id', $cuotaBloqueada->id)
+                    ->first();
+
+                if ($existente) {
+                    return ['existente' => true, 'comprobante' => $existente];
+                }
+
+                $contrato = $cuotaBloqueada->contrato;
+                $descripcion = sprintf(
+                    'Cuota del contrato %s - vencimiento %s',
+                    $contrato->numero,
+                    optional($cuotaBloqueada->fecha_vencimiento)->format('d/m/Y')
+                );
+
+                $comprobante = $service->crear([
+                    'cliente_id' => $contrato->cliente_id,
+                    'contrato_id' => $contrato->id,
+                    'cuota_id' => $cuotaBloqueada->id,
+                    'tipo_documento' => 'F',
+                    'moneda' => 'PEN',
+                    'forma_pago' => 'D',
+                    'detalles' => [[
+                        'descripcion' => $descripcion,
+                        'cantidad' => 1,
+                        // El monto de la cuota es el total final, con IGV incluido.
+                        'precio_unitario' => (float) $cuotaBloqueada->monto,
+                        'tipo_igv' => '10',
+                        'unidad' => 'NIU',
+                    ]],
+                ], false);
+
+                return ['existente' => false, 'comprobante' => $comprobante];
+            });
+
+            if ($resultado['existente']) {
+                return response()->json([
+                    'status' => 409,
+                    'message' => 'Esta cuenta por cobrar ya tiene una factura generada.',
+                    'data' => new ComprobanteResource($resultado['comprobante']),
+                ], 409);
+            }
+
+            $emitido = $service->emitir($resultado['comprobante']);
+
+            return response()->json([
+                'status' => $emitido->estado === 'X' ? 422 : 201,
+                'message' => $emitido->estado === 'X'
+                    ? 'La factura se genero, pero el facturador la rechazo: ' . $emitido->error_text . ' Puedes reenviar la misma factura.'
+                    : 'Factura generada y enviada correctamente.',
+                'data' => new ComprobanteResource($emitido),
+            ], $emitido->estado === 'X' ? 422 : 201);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => 500,
+                'message' => 'No se pudo generar la factura.',
                 'error' => $e->getMessage(),
             ], 500);
         }

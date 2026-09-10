@@ -58,4 +58,9 @@ class Cuota extends Model
 	{
 		return $this->hasMany(PagosCuotum::class);
 	}
+
+	public function comprobante()
+	{
+		return $this->hasOne(Comprobante::class);
+	}
 }

@@ -28,7 +28,8 @@ class ComprobanteService
 
             $correlativo = $data['correlativo'] ?? $this->siguienteCorrelativo($tipoDocumento, $serie);
             $totales = $this->calcularTotales($detalles, (float) $facturador->porcentaje_igv);
-            $fecha = $data['fecha_emision'] ?? now()->toDateString();
+            $ahoraFiscal = Carbon::now(config('facturacion.timezone', 'America/Lima'));
+            $fecha = $data['fecha_emision'] ?? $ahoraFiscal->toDateString();
 
             $comprobante = Comprobante::create([
                 'cliente_id' => $cliente->id,
@@ -41,7 +42,7 @@ class ComprobanteService
                 'moneda' => $data['moneda'] ?? 'PEN',
                 'forma_pago' => $data['forma_pago'] ?? 'C',
                 'fecha_emision' => $fecha,
-                'hora_emision' => Carbon::now()->format('H:i:s'),
+                'hora_emision' => $ahoraFiscal->format('H:i:s'),
                 'subtotal' => $totales['subtotal'],
                 'igv' => $totales['igv'],
                 'total' => $totales['total'],
@@ -74,7 +75,16 @@ class ComprobanteService
                 return $comprobante;
             }
 
-            $payload = $comprobante->payload ?: $this->armarPayload($comprobante, $comprobante->facturador);
+            $hoyFiscal = Carbon::now(config('facturacion.timezone', 'America/Lima'))->startOfDay();
+            if ($comprobante->fecha_emision->startOfDay()->greaterThan($hoyFiscal)) {
+                throw ValidationException::withMessages([
+                    'fecha_emision' => 'La fecha de emision no puede ser futura en horario de Peru.',
+                ]);
+            }
+
+            // Siempre se reconstruye para que un reintento use el contrato vigente
+            // del proveedor y cualquier correccion guardada.
+            $payload = $this->armarPayload($comprobante, $comprobante->facturador);
             $comprobante->update([
                 'estado' => 'R',
                 'payload' => $payload,
@@ -95,10 +105,71 @@ class ComprobanteService
                 'nombre_documento' => $respuesta['nombre_documento'] ?? null,
                 'xml_path' => $paths['xmlPath'],
                 'cdr_path' => $paths['cdrPath'],
+                'zip_path' => $paths['zipPath'],
                 'error_code' => $aceptado ? null : (string) ($respuesta['code'] ?? 'ERROR'),
                 'error_text' => $aceptado ? null : ($respuesta['mensaje'] ?? 'Error al emitir comprobante.'),
                 'fecha_respuesta' => now(),
             ]);
+
+            return $comprobante->fresh(['cliente.contactos_clientes', 'detalles', 'facturador']);
+        });
+    }
+
+    public function actualizar(Comprobante $comprobante, array $data): Comprobante
+    {
+        return DB::transaction(function () use ($comprobante, $data) {
+            $comprobante = Comprobante::with(['cliente.contactos_clientes', 'detalles', 'facturador'])
+                ->lockForUpdate()
+                ->findOrFail($comprobante->id);
+
+            if (in_array($comprobante->estado, ['M', 'T', 'U'], true)) {
+                throw ValidationException::withMessages([
+                    'comprobante' => 'Un comprobante aceptado no se puede editar. Debes emitir una nota de credito.',
+                ]);
+            }
+
+            $cliente = Cliente::with('contactos_clientes')->findOrFail($data['cliente_id']);
+            $tipoDocumento = $data['tipo_documento'];
+            $facturador = $this->resolveFacturador($data['facturador_id'] ?? $comprobante->facturador_id);
+            $detalles = $this->normalizarDetalles($data['detalles']);
+            $this->validarCliente($cliente, $tipoDocumento);
+            $totales = $this->calcularTotales($detalles, (float) $facturador->porcentaje_igv);
+
+            $comprobante->update([
+                'cliente_id' => $cliente->id,
+                'facturador_id' => $facturador->id,
+                'tipo_documento' => $tipoDocumento,
+                'serie' => strtoupper($data['serie'] ?? $comprobante->serie),
+                'correlativo' => $data['correlativo'] ?? $comprobante->correlativo,
+                'moneda' => strtoupper($data['moneda'] ?? $comprobante->moneda),
+                'forma_pago' => $data['forma_pago'] ?? $comprobante->forma_pago,
+                'fecha_emision' => $data['fecha_emision'] ?? $comprobante->fecha_emision,
+                'subtotal' => $totales['subtotal'],
+                'igv' => $totales['igv'],
+                'total' => $totales['total'],
+                'estado' => 'E',
+                'payload' => null,
+                'sunat_request' => null,
+                'sunat_response' => null,
+                'solicitud_facturador_id' => null,
+                'nombre_documento' => null,
+                'xml_path' => null,
+                'cdr_path' => null,
+                'zip_path' => null,
+                'error_code' => null,
+                'error_text' => null,
+                'fecha_envio' => null,
+                'fecha_respuesta' => null,
+            ]);
+
+            $comprobante->detalles()->delete();
+            foreach ($totales['detalles'] as $detalle) {
+                $comprobante->detalles()->create($detalle);
+            }
+
+            $comprobante->load(['cliente.contactos_clientes', 'detalles', 'facturador']);
+            $payload = $this->armarPayload($comprobante, $facturador);
+            $comprobante->update(['payload' => $payload]);
 
             return $comprobante->fresh(['cliente.contactos_clientes', 'detalles', 'facturador']);
         });
@@ -112,10 +183,12 @@ class ComprobanteService
             try {
                 $payload = $data;
                 $payload['cliente_id'] = $clienteId;
+                $comprobante = $this->crear($payload, (bool) ($data['emitir'] ?? true));
                 $resultados[] = [
                     'cliente_id' => $clienteId,
-                    'ok' => true,
-                    'comprobante' => $this->crear($payload, (bool) ($data['emitir'] ?? true)),
+                    'ok' => $comprobante->estado !== 'X',
+                    'message' => $comprobante->estado === 'X' ? $comprobante->error_text : null,
+                    'comprobante' => $comprobante,
                 ];
             } catch (\Throwable $e) {
                 $resultados[] = [
@@ -218,9 +291,12 @@ class ComprobanteService
         $calculados = [];
 
         foreach ($detalles as $detalle) {
-            $lineSubtotal = round($detalle['cantidad'] * $detalle['precio_unitario'], 2);
-            $lineIgv = $detalle['tipo_igv'] === '10' ? round($lineSubtotal * ($porcentajeIgv / 100), 2) : 0;
-            $lineTotal = round($lineSubtotal + $lineIgv, 2);
+            // El precio ingresado ya incluye IGV. Se desglosa sin volver a sumarlo.
+            $lineTotal = round($detalle['cantidad'] * $detalle['precio_unitario'], 2);
+            $lineSubtotal = $detalle['tipo_igv'] === '10'
+                ? round($lineTotal / (1 + ($porcentajeIgv / 100)), 2)
+                : $lineTotal;
+            $lineIgv = round($lineTotal - $lineSubtotal, 2);
             $subtotal += $lineSubtotal;
             $igv += $lineIgv;
             $calculados[] = $detalle + [
@@ -233,9 +309,33 @@ class ComprobanteService
         return [
             'subtotal' => round($subtotal, 2),
             'igv' => round($igv, 2),
-            'total' => round($subtotal + $igv, 2),
+            'total' => round(array_sum(array_column($calculados, 'total')), 2),
             'detalles' => $calculados,
         ];
+    }
+
+    private function limpiarTexto(?string $texto, int $max = 100): string
+    {
+        if ($texto === null || $texto === '') {
+            return '';
+        }
+
+        // Reemplazar símbolos comunes de direcciones y títulos conflictivos con SQL remoto
+        $texto = str_replace(
+            ['ª', 'º', '°', '–', '—', '“', '”', '’', '‘', '`'],
+            ['a.', 'o.', '.', '-', '-', '"', '"', "'", "'", "'"],
+            $texto
+        );
+
+        // Eliminar comillas y caracteres de escape para evitar fallos de sintaxis en el facturador
+        $texto = str_replace(["'", '"', '\\'], '', $texto);
+
+        // Normalizar espacios en blanco y saltos de línea
+        $texto = preg_replace('/\s+/', ' ', $texto) ?? $texto;
+
+        $texto = trim($texto);
+
+        return mb_substr($texto, 0, $max, 'UTF-8');
     }
 
     private function armarPayload(Comprobante $comprobante, Facturador $facturador): array
@@ -254,39 +354,58 @@ class ComprobanteService
             ?: $contacto?->nombre;
         $direccionResolvida = $cliente->direccion ?: $parent?->direccion ?: $grandParent?->direccion;
 
-        return [
-            'empresa_id' => $facturador->empresa_id,
-            'tipo_documento' => $comprobante->tipo_documento,
-            'serie' => $comprobante->serie,
-            'correlativo' => $comprobante->correlativo,
-            'numeroboleta' => $comprobante->serie . '-' . str_pad((string) $comprobante->correlativo, 6, '0', STR_PAD_LEFT),
+        $razonSocialLimpia = $this->limpiarTexto($razonSocialResolvida, 100);
+        $direccionLimpia = $this->limpiarTexto($direccionResolvida, 100);
+
+        $numero = $comprobante->serie . '-' . str_pad((string) $comprobante->correlativo, 6, '0', STR_PAD_LEFT);
+        $documentoCliente = preg_replace('/\D/', '', (string) ($rucResolvido ?: $contacto?->dni ?: ''));
+        $tipoDocumentoCliente = $comprobante->tipo_documento === 'F'
+            ? 6
+            : ($rucResolvido ? 6 : ($contacto?->dni ? 1 : 0));
+
+        // Contrato real de comprobante-e: el comprobante va serializado dentro
+        // de un sobre con serie, correlativo y datos del receptor.
+        $documento = [
+            $comprobante->tipo_documento === 'F' ? 'numerofactura' : 'numeroboleta' => $numero,
             'fechaemision' => optional($comprobante->fecha_emision)->format('Y-m-d'),
             'horaemision' => $comprobante->hora_emision,
+            'usuario' => $razonSocialLimpia,
+            'codubigeo' => '0000',
+            'tipodoc' => $tipoDocumentoCliente,
+            $comprobante->tipo_documento === 'F' ? 'ruc' : 'dni' => $documentoCliente,
             'moneda' => $comprobante->moneda,
-            'formapago' => $comprobante->forma_pago,
-            'porcentajeigv' => (float) $facturador->porcentaje_igv,
-            'cliente' => [
-                'tipo_doc' => $comprobante->tipo_documento === 'F' ? '6' : ($rucResolvido ? '6' : ($contacto?->dni ? '1' : '0')),
-                'numero_doc' => $rucResolvido ?: $contacto?->dni,
-                'nombre' => $razonSocialResolvida,
-                'direccion' => $direccionResolvida,
-            ],
-            'detalles' => $comprobante->detalles->map(fn ($detalle) => [
+            'descuentototal' => '0',
+            'percepcion' => '',
+            'aplicacionpercepcion' => '',
+            'documentosanexos' => [],
+            'detalles' => $comprobante->detalles->values()->map(fn ($detalle) => [
                 'tipodetalle' => 'V',
                 'codigo' => (string) ($detalle->producto_id ?: '-'),
                 'unidadmedida' => $detalle->unidad,
                 'cantidad' => (float) $detalle->cantidad,
-                'descripcion' => $detalle->descripcion,
+                'descripcion' => $this->limpiarTexto($detalle->descripcion, 250),
                 'precioventaunitarioxitem' => (float) $detalle->precio_unitario,
                 'descuentoxitem' => '0',
                 'tipoigv' => $detalle->tipo_igv,
-                'subtotal' => (float) $detalle->subtotal,
-                'igv' => (float) $detalle->igv,
-                'total' => (float) $detalle->total,
+                'tasaisc' => '0',
+                'aplicacionisc' => '',
+                'precioventasugeridoxitem' => '',
             ])->values()->all(),
-            'subtotal' => (float) $comprobante->subtotal,
-            'igv' => (float) $comprobante->igv,
+            'formapago' => $comprobante->forma_pago,
+        ];
+
+        $serieKey = $comprobante->tipo_documento === 'F' ? 'seriefactura' : 'serieboleta';
+        $correlativoKey = $comprobante->tipo_documento === 'F' ? 'correlativofactura' : 'correlativoboleta';
+
+        return [
+            'token' => (string) ($facturador->token ?? ''),
+            $serieKey => $comprobante->serie,
+            $correlativoKey => (string) $comprobante->correlativo,
+            'doc' => (string) $documentoCliente,
+            'nombre' => (string) $razonSocialLimpia,
+            'direccion' => (string) $direccionLimpia,
             'total' => (float) $comprobante->total,
+            'comprobante' => json_encode($documento, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         ];
     }
 
@@ -299,10 +418,15 @@ class ComprobanteService
         Storage::disk('local')->put($xmlPath, json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
         Storage::disk('local')->put($cdrPath, json_encode($respuesta, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
 
+        $zipPath = null;
         if (!empty($respuesta['fileZIPBASE64'])) {
-            Storage::disk('local')->put($base . '/sunat.zip', base64_decode($respuesta['fileZIPBASE64']));
+            $zip = base64_decode((string) $respuesta['fileZIPBASE64'], true);
+            if ($zip !== false) {
+                $zipPath = $base . '/sunat.zip';
+                Storage::disk('local')->put($zipPath, $zip);
+            }
         }
 
-        return compact('xmlPath', 'cdrPath');
+        return compact('xmlPath', 'cdrPath', 'zipPath');
     }
 }

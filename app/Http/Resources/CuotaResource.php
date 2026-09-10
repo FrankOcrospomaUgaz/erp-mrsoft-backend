@@ -37,6 +37,9 @@ class CuotaResource extends JsonResource
             // Relaciones
             'contrato' => $this->whenLoaded('contrato'),
             'pagos_cuota' => $this->whenLoaded('pagos_cuota'),
+            'comprobante' => $this->whenLoaded('comprobante', fn () => $this->comprobante
+                ? new ComprobanteResource($this->comprobante)
+                : null),
         ];
     }
 }

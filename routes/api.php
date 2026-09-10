@@ -24,6 +24,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('comprobantes/{id}/pdf', [App\Http\Controllers\ComprobanteController::class, 'pdf']);
     Route::get('comprobantes/{id}/download-xml', [App\Http\Controllers\ComprobanteController::class, 'downloadXml']);
     Route::get('comprobantes/{id}/download-cdr', [App\Http\Controllers\ComprobanteController::class, 'downloadCdr']);
+    Route::get('comprobantes/{id}/download-zip', [App\Http\Controllers\ComprobanteController::class, 'downloadZip']);
     Route::apiResource('comprobantes', App\Http\Controllers\ComprobanteController::class)->only(['index', 'show']);
     Route::get('contratos/siguiente-numero', [App\Http\Controllers\ContratoController::class, 'siguienteNumero']);
     Route::get('contratos/{id}/pdf', [App\Http\Controllers\ContratoController::class, 'pdf']);
@@ -46,7 +47,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('comprobantes/envio-masivo-whatsapp', [App\Http\Controllers\ComprobanteController::class, 'envioMasivoWhatsApp']);
         Route::post('comprobantes/{id}/enviar-whatsapp', [App\Http\Controllers\ComprobanteController::class, 'enviarWhatsApp']);
         Route::post('comprobantes/{id}/emitir', [App\Http\Controllers\ComprobanteController::class, 'emitir']);
-        Route::apiResource('comprobantes', App\Http\Controllers\ComprobanteController::class)->only(['store']);
+        Route::apiResource('comprobantes', App\Http\Controllers\ComprobanteController::class)->only(['store', 'update']);
         Route::get('facturadores/activo', [App\Http\Controllers\FacturadorController::class, 'activo']);
         Route::match(['post', 'put'], 'facturadores/activo', [App\Http\Controllers\FacturadorController::class, 'guardarActivo']);
         Route::apiResource('facturadores', App\Http\Controllers\FacturadorController::class);
@@ -60,6 +61,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('contratos/{id}/firmas', [App\Http\Controllers\ContratoController::class, 'guardarFirmas']);
         Route::apiResource('contratos', App\Http\Controllers\ContratoController::class)->only(['store', 'update', 'destroy']);
         Route::post('cuotas/{cuota}/reenviar-factura', [App\Http\Controllers\CuotaController::class, 'reenviarFactura']);
+        Route::post('cuotas/{cuota}/generar-factura', [App\Http\Controllers\CuotaController::class, 'generarFactura']);
         Route::apiResource('cuotas', App\Http\Controllers\CuotaController::class)->only(['store', 'update', 'destroy']);
         Route::apiResource('avisos-saas', App\Http\Controllers\AvisoSaasController::class);
     });

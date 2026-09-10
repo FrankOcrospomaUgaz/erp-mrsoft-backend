@@ -33,9 +33,18 @@ class ComprobanteResource extends JsonResource
             'nombre_documento' => $this->nombre_documento,
             'xml_path' => $this->xml_path,
             'cdr_path' => $this->cdr_path,
+            'zip_path' => $this->zip_path,
             'pdf_path' => $this->pdf_path,
+            'sunat_response' => $this->sunat_response,
+            'sunat_request' => $this->sunat_request,
             'error_code' => $this->error_code,
             'error_text' => $this->error_text,
+            'facturador_modo' => $this->whenLoaded('facturador', fn () => $this->facturador?->modo),
+            'facturador_configurado' => $this->whenLoaded('facturador', fn () => $this->facturador
+                && filled($this->facturador->empresa_id)
+                && filled($this->facturador->usuario_sol)
+                && filled($this->facturador->clave_sol)
+                && filled($this->tipo_documento === 'B' ? $this->facturador->wsdl_boleta : $this->facturador->wsdl_factura)),
             'fecha_envio' => $this->fecha_envio,
             'fecha_respuesta' => $this->fecha_respuesta,
             'estado_envio_cliente' => $this->estado_envio_cliente ?? 'pendiente',
