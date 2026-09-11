@@ -441,19 +441,47 @@ class ContratoController extends Controller
         $cantPeriodo = $periodicidadPago === 'anual' ? max(1, (int) $contrato->duracion_anios) : max(1, $cuotas->count());
         $totalServicioRecurrente = (float) ($baseServicio * $cantPeriodo);
 
+        $itemIndex = 1;
         $table->addRow();
-        $table->addCell(800)->addText('01', $fNormal, ['alignment' => Jc::CENTER]);
+        $table->addCell(800)->addText(sprintf('%02d', $itemIndex++), $fNormal, ['alignment' => Jc::CENTER]);
         $table->addCell(4600)->addText('Pago instalación del servicio de plataforma de software para ' . $servicioCompleto, $fNormal);
         $table->addCell(1400)->addText('S/ ' . number_format($costoInstalacion, 2, '.', ''), $fNormal, ['alignment' => Jc::CENTER]);
         $table->addCell(1000)->addText('1', $fNormal, ['alignment' => Jc::CENTER]);
         $table->addCell(1400)->addText('S/ ' . number_format($costoInstalacion, 2, '.', ''), $fNormal, ['alignment' => Jc::CENTER]);
 
-        $table->addRow();
-        $table->addCell(800)->addText('02', $fNormal, ['alignment' => Jc::CENTER]);
-        $table->addCell(4600)->addText($descripcionServicio, $fNormal);
-        $table->addCell(1400)->addText('S/ ' . number_format($baseServicio, 2, '.', ''), $fNormal, ['alignment' => Jc::CENTER]);
-        $table->addCell(1000)->addText((string)$cantPeriodo, $fNormal, ['alignment' => Jc::CENTER]);
-        $table->addCell(1400)->addText('S/ ' . number_format($totalServicioRecurrente, 2, '.', ''), $fNormal, ['alignment' => Jc::CENTER]);
+        if ($contrato->contratoProductoModulos && $contrato->contratoProductoModulos->count() > 0) {
+            foreach ($contrato->contratoProductoModulos as $itemModulo) {
+                $prodNombre = strtoupper($itemModulo->producto?->nombre ?? '');
+                $modNombre = $itemModulo->modulo?->nombre ?? '';
+                $modDescContrato = $itemModulo->modulo?->descripcion_contrato;
+                $periodoStr = strtoupper($periodicidadPago === 'anual' ? 'ANUAL' : 'MENSUAL');
+
+                if (!empty($modDescContrato)) {
+                    $itemDesc = "Pago {$periodoStr} por {$modDescContrato} {$prodNombre}";
+                } elseif (!empty($modNombre)) {
+                    $itemDesc = "Pago {$periodoStr} por servicio de plataforma de software para {$modNombre} {$prodNombre}";
+                } else {
+                    $itemDesc = "Pago {$periodoStr} por servicio de plataforma de software para {$prodNombre}";
+                }
+
+                $precioUnitario = (float) $itemModulo->precio;
+                $subtotalItem = $precioUnitario * $cantPeriodo;
+
+                $table->addRow();
+                $table->addCell(800)->addText(sprintf('%02d', $itemIndex++), $fNormal, ['alignment' => Jc::CENTER]);
+                $table->addCell(4600)->addText($itemDesc, $fNormal);
+                $table->addCell(1400)->addText('S/ ' . number_format($precioUnitario, 2, '.', ''), $fNormal, ['alignment' => Jc::CENTER]);
+                $table->addCell(1000)->addText((string)$cantPeriodo, $fNormal, ['alignment' => Jc::CENTER]);
+                $table->addCell(1400)->addText('S/ ' . number_format($subtotalItem, 2, '.', ''), $fNormal, ['alignment' => Jc::CENTER]);
+            }
+        } else {
+            $table->addRow();
+            $table->addCell(800)->addText(sprintf('%02d', $itemIndex++), $fNormal, ['alignment' => Jc::CENTER]);
+            $table->addCell(4600)->addText($descripcionServicio, $fNormal);
+            $table->addCell(1400)->addText('S/ ' . number_format($baseServicio, 2, '.', ''), $fNormal, ['alignment' => Jc::CENTER]);
+            $table->addCell(1000)->addText((string)$cantPeriodo, $fNormal, ['alignment' => Jc::CENTER]);
+            $table->addCell(1400)->addText('S/ ' . number_format($totalServicioRecurrente, 2, '.', ''), $fNormal, ['alignment' => Jc::CENTER]);
+        }
 
         $table->addRow();
         $cellTotal = $table->addCell(9200, ['gridSpan' => 5]);

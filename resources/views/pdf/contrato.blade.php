@@ -162,20 +162,52 @@
                     </tr>
                 </thead>
                 <tbody>
+                    @php
+                        $itemIndex = 1;
+                    @endphp
                     <tr>
-                        <td class="text-center">01</td>
+                        <td class="text-center">{{ sprintf('%02d', $itemIndex++) }}</td>
                         <td>Pago instalacion del servicio de plataforma de software para {{ $servicioCompleto }}</td>
                         <td class="text-center">S/ {{ number_format($costoInstalacion, 2, '.', '') }}</td>
                         <td class="text-center">1</td>
                         <td class="text-center">S/ {{ number_format($costoInstalacion, 2, '.', '') }}</td>
                     </tr>
-                    <tr>
-                        <td class="text-center">02</td>
-                        <td>{{ $descripcionServicio }}</td>
-                        <td class="text-center">S/ {{ number_format($baseServicio, 2, '.', '') }}</td>
-                        <td class="text-center">{{ $cantPeriodo }}</td>
-                        <td class="text-center">S/ {{ number_format($totalServicioRecurrente, 2, '.', '') }}</td>
-                    </tr>
+                    @if(isset($contrato->contratoProductoModulos) && count($contrato->contratoProductoModulos) > 0)
+                        @foreach($contrato->contratoProductoModulos as $itemModulo)
+                            @php
+                                $prodNombre = strtoupper($itemModulo->producto?->nombre ?? '');
+                                $modNombre = $itemModulo->modulo?->nombre ?? '';
+                                $modDescContrato = $itemModulo->modulo?->descripcion_contrato;
+                                $periodoStr = strtoupper($periodicidadPago === 'anual' ? 'ANUAL' : 'MENSUAL');
+
+                                if (!empty($modDescContrato)) {
+                                    $itemDesc = "Pago {$periodoStr} por {$modDescContrato} {$prodNombre}";
+                                } elseif (!empty($modNombre)) {
+                                    $itemDesc = "Pago {$periodoStr} por servicio de plataforma de software para {$modNombre} {$prodNombre}";
+                                } else {
+                                    $itemDesc = "Pago {$periodoStr} por servicio de plataforma de software para {$prodNombre}";
+                                }
+
+                                $precioUnitario = (float) $itemModulo->precio;
+                                $subtotalItem = $precioUnitario * $cantPeriodo;
+                            @endphp
+                            <tr>
+                                <td class="text-center">{{ sprintf('%02d', $itemIndex++) }}</td>
+                                <td>{{ $itemDesc }}</td>
+                                <td class="text-center">S/ {{ number_format($precioUnitario, 2, '.', '') }}</td>
+                                <td class="text-center">{{ $cantPeriodo }}</td>
+                                <td class="text-center">S/ {{ number_format($subtotalItem, 2, '.', '') }}</td>
+                            </tr>
+                        @endforeach
+                    @else
+                        <tr>
+                            <td class="text-center">{{ sprintf('%02d', $itemIndex++) }}</td>
+                            <td>{{ $descripcionServicio }}</td>
+                            <td class="text-center">S/ {{ number_format($baseServicio, 2, '.', '') }}</td>
+                            <td class="text-center">{{ $cantPeriodo }}</td>
+                            <td class="text-center">S/ {{ number_format($totalServicioRecurrente, 2, '.', '') }}</td>
+                        </tr>
+                    @endif
                     <tr>
                         <td colspan="5" class="text-right"><strong>TOTAL DEL CONTRATO CON IGV S/ {{ number_format((float) $contrato->total, 2, '.', '') }}</strong></td>
                     </tr>
