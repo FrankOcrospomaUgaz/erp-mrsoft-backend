@@ -730,6 +730,34 @@ class ContratoController extends Controller
         ]);
     }
 
+    public function firmarCliente(Request $request, $id)
+    {
+        $contrato = Contrato::findOrFail($id);
+
+        $user = $request->user();
+        if ($user?->cliente_id && (int)$user->cliente_id !== (int)$contrato->cliente_id) {
+            return response()->json(['status' => 403, 'message' => 'No tienes permiso para firmar este contrato.'], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'firma_cliente' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => 422, 'errors' => $validator->errors()], 422);
+        }
+
+        $contrato->update([
+            'firma_cliente' => $request->input('firma_cliente'),
+        ]);
+
+        return response()->json([
+            'status' => 200,
+            'message' => 'Contrato firmado por el cliente correctamente.',
+            'data' => new ContratoResource($contrato->fresh()),
+        ]);
+    }
+
     public function store(Request $request)
     {
         if ($request->user()?->cliente_id) {

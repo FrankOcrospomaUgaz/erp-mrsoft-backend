@@ -30,14 +30,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('contratos/{id}/pdf', [App\Http\Controllers\ContratoController::class, 'pdf']);
     Route::get('contratos/{id}/word', [App\Http\Controllers\ContratoController::class, 'word']);
     Route::apiResource('contratos', App\Http\Controllers\ContratoController::class)->only(['index', 'show']);
+    Route::post('contratos/{id}/firmar-cliente', [App\Http\Controllers\ContratoController::class, 'firmarCliente']);
     Route::apiResource('cuotas', App\Http\Controllers\CuotaController::class)->only(['index', 'show']);
+    Route::get('productos/{id}/formato-alta/pdf', [App\Http\Controllers\ProductoController::class, 'pdfFormatoAlta']);
 
     Route::middleware(AdminOnly::class)->group(function () {
         Route::get('/dashboard/resumen', [App\Http\Controllers\DashboardController::class, 'resumen']);
         Route::apiResource('tipo-usuarios', App\Http\Controllers\TipoUsuarioController::class);
         Route::apiResource('tipos-local', App\Http\Controllers\TipoLocalController::class);
         Route::apiResource('usuarios', App\Http\Controllers\UsuarioController::class);
-        Route::get('productos/{id}/formato-alta/pdf', [App\Http\Controllers\ProductoController::class, 'pdfFormatoAlta']);
         Route::get('productos/{id}/formato-alta', [App\Http\Controllers\ProductoController::class, 'getFormatoAlta']);
         Route::put('productos/{id}/formato-alta', [App\Http\Controllers\ProductoController::class, 'updateFormatoAlta']);
         Route::apiResource('productos', App\Http\Controllers\ProductoController::class);
