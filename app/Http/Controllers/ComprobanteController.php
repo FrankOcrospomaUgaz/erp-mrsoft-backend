@@ -155,6 +155,37 @@ class ComprobanteController extends Controller
         }
     }
 
+    public function destroy(Request $request, $id)
+    {
+        if ($request->user()?->cliente_id) {
+            return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
+        }
+
+        $comprobante = Comprobante::find($id);
+        if (!$comprobante) {
+            return response()->json(['status' => 404, 'message' => 'Comprobante no encontrado'], 404);
+        }
+
+        if (in_array($comprobante->estado, ['M', 'T'], true)) {
+            return response()->json([
+                'status' => 422,
+                'message' => 'No se puede eliminar una factura que ya fue aceptada por SUNAT. Corresponde emitir una nota de credito.',
+            ], 422);
+        }
+
+        if ($comprobante->cuota_id) {
+            $comprobante->cuota_id = null;
+            $comprobante->save();
+        }
+
+        $comprobante->delete();
+
+        return response()->json([
+            'status' => 200,
+            'message' => 'Factura eliminada correctamente. La cuota se habilito nuevamente.',
+        ]);
+    }
+
     public function emisionMasiva(Request $request)
     {
         if ($request->user()?->cliente_id) {

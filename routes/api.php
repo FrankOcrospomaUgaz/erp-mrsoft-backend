@@ -48,7 +48,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('comprobantes/envio-masivo-whatsapp', [App\Http\Controllers\ComprobanteController::class, 'envioMasivoWhatsApp']);
         Route::post('comprobantes/{id}/enviar-whatsapp', [App\Http\Controllers\ComprobanteController::class, 'enviarWhatsApp']);
         Route::post('comprobantes/{id}/emitir', [App\Http\Controllers\ComprobanteController::class, 'emitir']);
-        Route::apiResource('comprobantes', App\Http\Controllers\ComprobanteController::class)->only(['store', 'update']);
+        Route::apiResource('comprobantes', App\Http\Controllers\ComprobanteController::class)->only(['store', 'update', 'destroy']);
         Route::get('facturadores/activo', [App\Http\Controllers\FacturadorController::class, 'activo']);
         Route::match(['post', 'put'], 'facturadores/activo', [App\Http\Controllers\FacturadorController::class, 'guardarActivo']);
         Route::apiResource('facturadores', App\Http\Controllers\FacturadorController::class);
