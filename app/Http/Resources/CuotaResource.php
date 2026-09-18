@@ -35,7 +35,7 @@ class CuotaResource extends JsonResource
             'updated_at' => $this->updated_at?->format('Y-m-d H:i:s'),
 
             // Relaciones
-            'contrato' => $this->whenLoaded('contrato'),
+            'contrato' => $this->whenLoaded('contrato', fn () => new ContratoResource($this->contrato)),
             'pagos_cuota' => $this->whenLoaded('pagos_cuota'),
             'comprobante' => $this->whenLoaded('comprobante', fn () => $this->comprobante
                 ? new ComprobanteResource($this->comprobante)

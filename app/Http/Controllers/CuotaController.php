@@ -22,6 +22,8 @@ class CuotaController extends Controller
         $clienteIds = $this->accessibleClienteIds($request);
         $query = Cuota::with([
             'contrato.cliente',
+            'contrato.contratoProductoModulos.producto',
+            'contrato.contratoProductoModulos.modulo',
             'pagos_cuota',
             'comprobante.cliente.contactos_clientes',
             'comprobante.detalles',
@@ -118,6 +120,8 @@ class CuotaController extends Controller
         // Cargar todas las relaciones necesarias
         $cuota->load([
             'contrato.cliente',
+            'contrato.contratoProductoModulos.producto',
+            'contrato.contratoProductoModulos.modulo',
             'pagos_cuota',
             'comprobante.cliente.contactos_clientes',
             'comprobante.detalles',
