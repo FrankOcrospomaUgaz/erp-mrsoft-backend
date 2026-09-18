@@ -62,6 +62,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('contratos/{id}/firmas', [App\Http\Controllers\ContratoController::class, 'guardarFirmas']);
         Route::apiResource('contratos', App\Http\Controllers\ContratoController::class)->only(['store', 'update', 'destroy']);
         Route::post('cuotas/{cuota}/reenviar-factura', [App\Http\Controllers\CuotaController::class, 'reenviarFactura']);
+        Route::get('cuotas/siguiente-correlativo', [App\Http\Controllers\CuotaController::class, 'siguienteCorrelativo']);
         Route::post('cuotas/{cuota}/generar-factura', [App\Http\Controllers\CuotaController::class, 'generarFactura']);
         Route::apiResource('cuotas', App\Http\Controllers\CuotaController::class)->only(['store', 'update', 'destroy']);
         Route::apiResource('avisos-saas', App\Http\Controllers\AvisoSaasController::class);

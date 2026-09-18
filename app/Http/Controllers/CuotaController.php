@@ -294,14 +294,49 @@ class CuotaController extends Controller
         }
     }
 
-    public function generarFactura(Cuota $cuota, ComprobanteService $service)
+    public function siguienteCorrelativo(Request $request)
     {
-        if (request()->user()?->cliente_id) {
+        $tipoDocumento = $request->get('tipo_documento', 'F');
+        $serie = strtoupper($request->get('serie', 'F001'));
+
+        $ultimoCorrelativo = (int) Comprobante::where('tipo_documento', $tipoDocumento)
+            ->where('serie', $serie)
+            ->max('correlativo');
+
+        $siguienteCorrelativo = $ultimoCorrelativo + 1;
+
+        $facturador = Facturador::where('activo', true)->first() ?? Facturador::latest()->first();
+
+        return response()->json([
+            'status' => 200,
+            'data' => [
+                'serie' => $serie,
+                'ultimo_correlativo' => $ultimoCorrelativo,
+                'siguiente_correlativo' => $siguienteCorrelativo,
+                'facturador' => [
+                    'id' => $facturador?->id,
+                    'modo' => $facturador?->modo ?? 'simulacion',
+                    'ruc' => $facturador?->ruc,
+                    'razon_social' => $facturador?->razon_social,
+                ]
+            ]
+        ]);
+    }
+
+    public function generarFactura(Request $request, Cuota $cuota, ComprobanteService $service)
+    {
+        if ($request->user()?->cliente_id) {
             return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
         }
 
+        $modo = $request->get('modo', 'sistema');
+
+        if ($modo === 'manual') {
+            return $this->generarFacturaManual($request, $cuota);
+        }
+
         try {
-            $resultado = DB::transaction(function () use ($cuota, $service) {
+            $resultado = DB::transaction(function () use ($request, $cuota, $service) {
                 $cuotaBloqueada = Cuota::with('contrato.cliente')
                     ->lockForUpdate()
                     ->findOrFail($cuota->id);
@@ -321,17 +356,23 @@ class CuotaController extends Controller
                     optional($cuotaBloqueada->fecha_vencimiento)->format('d/m/Y')
                 );
 
+                $serie = strtoupper($request->get('serie', 'F001'));
+                $correlativoSolicitado = $request->filled('correlativo') ? (int) $request->get('correlativo') : null;
+                $fechaEmision = $request->get('fecha_emision') ?: null;
+
                 $comprobante = $service->crear([
                     'cliente_id' => $contrato->cliente_id,
                     'contrato_id' => $contrato->id,
                     'cuota_id' => $cuotaBloqueada->id,
                     'tipo_documento' => 'F',
+                    'serie' => $serie,
+                    'correlativo' => $correlativoSolicitado,
                     'moneda' => 'PEN',
                     'forma_pago' => 'D',
+                    'fecha_emision' => $fechaEmision,
                     'detalles' => [[
                         'descripcion' => $descripcion,
                         'cantidad' => 1,
-                        // El monto de la cuota es el total final, con IGV incluido.
                         'precio_unitario' => (float) $cuotaBloqueada->monto,
                         'tipo_igv' => '10',
                         'unidad' => 'NIU',
@@ -361,8 +402,99 @@ class CuotaController extends Controller
         } catch (\Throwable $e) {
             return response()->json([
                 'status' => 500,
-                'message' => 'No se pudo generar la factura.',
+                'message' => 'No se pudo generar la factura: ' . $e->getMessage(),
                 'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    private function generarFacturaManual(Request $request, Cuota $cuota)
+    {
+        $validator = Validator::make($request->all(), [
+            'serie' => 'required|string|max:10',
+            'correlativo' => 'required|integer|min:1',
+            'fecha_emision' => 'nullable|date',
+            'monto_total' => 'nullable|numeric|min:0',
+            'pdf_file' => 'nullable|file|mimes:pdf|max:10240',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 422,
+                'message' => 'Revisa los datos ingresados para la factura manual.',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            $comprobante = DB::transaction(function () use ($request, $cuota) {
+                $existente = Comprobante::where('cuota_id', $cuota->id)->first();
+                if ($existente) {
+                    throw new \Exception('Esta cuota ya tiene una factura asignada.');
+                }
+
+                $cuota->load('contrato.cliente');
+                $contrato = $cuota->contrato;
+
+                $serie = strtoupper(trim($request->get('serie')));
+                $correlativo = (int) $request->get('correlativo');
+                $fechaEmision = $request->get('fecha_emision') ?: now()->toDateString();
+                $total = (float) ($request->get('monto_total') ?: $cuota->monto);
+
+                $facturador = Facturador::where('activo', true)->first() ?? Facturador::latest()->first();
+
+                $pdfPath = null;
+                if ($request->hasFile('pdf_file')) {
+                    $file = $request->file('pdf_file');
+                    $filename = sprintf('%s-%s-%s.pdf', $serie, str_pad((string)$correlativo, 6, '0', STR_PAD_LEFT), time());
+                    $pdfPath = $file->storeAs('facturas_manuales', $filename, 'local');
+                }
+
+                $subtotal = round($total / 1.18, 2);
+                $igv = round($total - $subtotal, 2);
+
+                $comprobante = Comprobante::create([
+                    'cliente_id' => $contrato->cliente_id,
+                    'contrato_id' => $contrato->id,
+                    'cuota_id' => $cuota->id,
+                    'facturador_id' => $facturador?->id,
+                    'tipo_documento' => 'F',
+                    'serie' => $serie,
+                    'correlativo' => $correlativo,
+                    'moneda' => 'PEN',
+                    'forma_pago' => 'C',
+                    'fecha_emision' => $fechaEmision,
+                    'hora_emision' => now()->format('H:i:s'),
+                    'subtotal' => $subtotal,
+                    'igv' => $igv,
+                    'total' => $total,
+                    'estado' => 'M', // 'M' = Manual / Registrado
+                    'pdf_path' => $pdfPath,
+                ]);
+
+                $comprobante->detalles()->create([
+                    'descripcion' => sprintf('Factura manual cuota contrato %s', $contrato->numero),
+                    'cantidad' => 1,
+                    'precio_unitario' => $total,
+                    'subtotal' => $subtotal,
+                    'igv' => $igv,
+                    'total' => $total,
+                    'tipo_igv' => '10',
+                    'unidad' => 'NIU',
+                ]);
+
+                return $comprobante;
+            });
+
+            return response()->json([
+                'status' => 201,
+                'message' => 'Factura manual cargada y vinculada exitosamente.',
+                'data' => new ComprobanteResource($comprobante->load(['cliente', 'detalles'])),
+            ], 201);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => 500,
+                'message' => $e->getMessage(),
             ], 500);
         }
     }
