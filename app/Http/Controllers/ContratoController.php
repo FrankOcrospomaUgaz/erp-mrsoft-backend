@@ -149,6 +149,39 @@ class ContratoController extends Controller
         ]);
     }
 
+    public function vigentes(Request $request)
+    {
+        $validated = $request->validate([
+            'cliente_id' => ['required', 'integer', 'exists:clientes,id'],
+            'exclude_id' => ['nullable', 'integer', 'exists:contratos,id'],
+        ]);
+
+        $clienteId = (int) $validated['cliente_id'];
+        $accessibleClienteIds = $this->accessibleClienteIds($request);
+
+        if ($accessibleClienteIds && !in_array($clienteId, $accessibleClienteIds, true)) {
+            return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
+        }
+
+        $today = now()->toDateString();
+        $contratos = Contrato::query()
+            ->where('cliente_id', $clienteId)
+            ->where('estado', 'activo')
+            ->whereDate('fecha_inicio', '<=', $today)
+            ->whereDate('fecha_fin', '>=', $today)
+            ->when(
+                $validated['exclude_id'] ?? null,
+                fn ($query, $excludeId) => $query->whereKeyNot($excludeId)
+            )
+            ->orderByDesc('fecha_fin')
+            ->get();
+
+        return response()->json([
+            'status' => 200,
+            'data' => ContratoResource::collection($contratos),
+        ]);
+    }
+
     public function show(Request $request, $id)
     {
         $contrato = Contrato::with([
