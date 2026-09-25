@@ -360,7 +360,40 @@ class ContratoController extends Controller
         $fechaContrato = $fechaInicioContrato->copy()->subDay();
         $diasDiff = $fechaFinContrato->diffInDays($fechaInicioContrato) + 1;
         $mesesCalculados = max(1, (int) round($diasDiff / 30.4375));
-        $mesesCantidad = $cuotas->count() > 0 ? $cuotas->count() : $mesesCalculados;
+        $costoInstalacion = $periodicidadPago === 'mensual' ? (float) ($contrato->costo_instalacion ?? 0) : 0;
+
+        if ($contrato->vigencia_contrato === 'anual') {
+            $mesesCantidad = max(1, (int) ($contrato->duracion_anios ?? 1) * 12);
+        } elseif ($contrato->vigencia_contrato === 'semestral') {
+            $mesesCantidad = 6;
+        } else {
+            if ($costoInstalacion > 0 && $cuotas->count() > 1) {
+                $mesesCantidad = $cuotas->count() - 1;
+            } elseif ($cuotas->count() > 0) {
+                $mesesCantidad = $cuotas->count();
+            } else {
+                $mesesCantidad = $mesesCalculados;
+            }
+        }
+
+        if ($periodicidadPago === 'anual') {
+            $cantPeriodo = max(1, (int) ($contrato->duracion_anios ?? 1));
+        } else {
+            if ($contrato->vigencia_contrato === 'anual') {
+                $cantPeriodo = max(1, (int) ($contrato->duracion_anios ?? 1) * 12);
+            } elseif ($contrato->vigencia_contrato === 'semestral') {
+                $cantPeriodo = 6;
+            } elseif ($costoInstalacion > 0 && $cuotas->count() > 1) {
+                $cantPeriodo = $cuotas->count() - 1;
+            } elseif ($cuotas->count() > 0) {
+                $cantPeriodo = $cuotas->count();
+            } else {
+                $cantPeriodo = $mesesCalculados;
+            }
+        }
+
+        $totalServicioRecurrente = (float) ($baseServicio * $cantPeriodo);
+
         $mesesTexto = match ($mesesCantidad) {
             1 => 'un (1)',
             2 => 'dos (2)',
@@ -390,7 +423,7 @@ class ContratoController extends Controller
         $cuotasTexto = match ($cuotas->count()) {
             1 => 'una', 2 => 'dos', 3 => 'tres', 4 => 'cuatro', 5 => 'cinco',
             6 => 'seis', 7 => 'siete', 8 => 'ocho', 9 => 'nueve', 10 => 'diez',
-            11 => 'once', 12 => 'doce', default => (string) $cuotas->count(),
+            11 => 'once', 12 => 'doce', 13 => 'trece', default => (string) $cuotas->count(),
         };
         $montoTotalLetras = $this->amountToWords((float) $contrato->total);
 
@@ -470,9 +503,6 @@ class ContratoController extends Controller
         $table->addCell(1000)->addText('Cantidad', $fBold, ['alignment' => Jc::CENTER]);
         $table->addCell(1400)->addText('Total', $fBold, ['alignment' => Jc::CENTER]);
 
-        $costoInstalacion = $periodicidadPago === 'mensual' ? (float) ($contrato->costo_instalacion ?? 0) : 0;
-        $cantPeriodo = $periodicidadPago === 'anual' ? max(1, (int) $contrato->duracion_anios) : max(1, $cuotas->count());
-        $totalServicioRecurrente = (float) ($baseServicio * $cantPeriodo);
 
         $itemIndex = 1;
         $table->addRow();
