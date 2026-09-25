@@ -46,12 +46,12 @@ class ClienteResource extends JsonResource
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
 
-            'contactos_clientes' => $this->contactos_clientes,
-            'contratos' => $this->contratos,
-            'sucursales_clientes' => $this->sucursales_clientes,
+            'contactos_clientes' => $this->whenLoaded('contactos_clientes'),
+            'contratos' => $this->whenLoaded('contratos'),
+            'sucursales_clientes' => $this->whenLoaded('sucursales_clientes'),
             'hijos_clientes' => ClienteResource::collection($this->whenLoaded('hijos_clientes')),
-            'notificaciones' => $this->notificaciones,
-            'avisos_saas' => $this->avisos_saas,
+            'notificaciones' => $this->whenLoaded('notificaciones'),
+            'avisos_saas' => $this->whenLoaded('avisos_saas'),
         ];
     }
 }

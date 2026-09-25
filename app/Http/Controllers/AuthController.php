@@ -39,11 +39,10 @@ class AuthController extends Controller
             ->where('fecha_vencimiento', '<', $hoy)
             ->get();
 
-        // Actualizar su estado a vencido
-        foreach ($cuotasPendientes as $cuota) {
-            $cuota->situacion = 'vencido';
-            $cuota->save();
-        }
+        // Actualizar su estado a vencido en una sola consulta bulk
+        Cuota::where('situacion', 'pendiente')
+            ->where('fecha_vencimiento', '<', $hoy)
+            ->update(['situacion' => 'vencido']);
 
         // Armar detalle de las cuotas vencidas
         $detalle = $cuotasPendientes->map(function ($c) {

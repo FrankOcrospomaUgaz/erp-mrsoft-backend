@@ -26,10 +26,8 @@ class ClienteController extends Controller
             ->whereNull('parent_cliente_id')
             ->with([
                 'contactos_clientes',
-                'contratos',
                 'sucursales_clientes',
                 'hijos_clientes.hijos_clientes',
-                'avisos_saas',
             ])
             ->when($search, function ($query, $search) {
                 $query->where(function ($q) use ($search) {

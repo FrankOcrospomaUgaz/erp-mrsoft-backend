@@ -39,7 +39,7 @@ class CuotaController extends Controller
 
             $query->where(function ($q) use ($search) {
                 $q->where('situacion', 'ILIKE', "%{$search}%")
-                    ->orWhere('monto', '::text ILIKE', "%{$search}%") // buscar monto como texto
+                    ->orWhereRaw('CAST(monto AS TEXT) ILIKE ?', ["%{$search}%"])
                     ->orWhereHas('contrato', function ($q2) use ($search) {
                         $q2->where('numero', 'ILIKE', "%{$search}%")
                             ->orWhere('tipo_contrato', 'ILIKE', "%{$search}%")
