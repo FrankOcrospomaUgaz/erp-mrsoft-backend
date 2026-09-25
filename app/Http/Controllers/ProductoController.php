@@ -21,24 +21,20 @@ class ProductoController extends Controller
     {
         $search = $request->get('search');
         $all = filter_var($request->get('all', false), FILTER_VALIDATE_BOOLEAN);
-        $perPage = $request->get('per_page', 5);
+        $perPage = (int) $request->get('per_page', 10);
 
         $query = Producto::with([
-            'modulos.contratos',
-            'contratos',
+            'modulos',
             'avisos_saas',
         ])->when($search, function ($query, $search) {
             $query->where(function ($q) use ($search) {
                 $q->where('nombre', 'ILIKE', "%{$search}%")
                     ->orWhere('tipo', 'ILIKE', "%{$search}%")
-                    ->orWhere('descripcion', 'ILIKE', "%{$search}%");
-            });
-
-            $query->orWhereHas('modulos', function ($q) use ($search) {
-                $q->where('nombre', 'ILIKE', "%{$search}%")
-                    ->orWhere('precio_unitario', 'ILIKE', "%{$search}%")
-                    ->orWhere('precio_mensual', 'ILIKE', "%{$search}%")
-                    ->orWhere('precio_anual', 'ILIKE', "%{$search}%");
+                    ->orWhere('descripcion', 'ILIKE', "%{$search}%")
+                    ->orWhereHas('modulos', function ($q2) use ($search) {
+                        $q2->where('nombre', 'ILIKE', "%{$search}%")
+                            ->orWhere('descripcion_contrato', 'ILIKE', "%{$search}%");
+                    });
             });
         })->latest();
 

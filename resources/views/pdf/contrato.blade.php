@@ -169,9 +169,9 @@
             con RUC N&deg; <strong>{{ $rucEmisor }}</strong>, domicilio en {{ $direccionEmisor }}, y debidamente representada
             por su representante legal quien firma el presente documento, <strong>{{ $representanteEmisor }}</strong> con
             DNI {{ $dniRepresentanteEmisor }}, en adelante <strong>EL ARRENDADOR</strong> y de otra parte
-            <strong>{{ $nombreCliente }}</strong> con RUC N&deg; <strong>{{ $rucCliente }}</strong> representada por el senor
+            <strong>{{ $nombreCliente }}</strong> con RUC N&deg; <strong>{{ $rucCliente }}</strong> representada por el señor
             <strong>{{ $representanteCliente }}</strong> con DNI N&deg; <strong>{{ $dniCliente }}</strong>, en adelante
-            <strong>EL CLIENTE</strong>, en los terminos y condiciones siguientes:
+            <strong>EL CLIENTE</strong>, en los términos y condiciones siguientes:
         </p>
 
         <div class="clause">

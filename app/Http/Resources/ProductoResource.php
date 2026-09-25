@@ -25,7 +25,7 @@ class ProductoResource extends JsonResource
                 'created_at' => $modulo->created_at,
                 'updated_at' => $modulo->updated_at,
                 'deleted_at' => $modulo->deleted_at,
-                'contratos' => $modulo->contratos ?? [],
+                'contratos' => $modulo->relationLoaded('contratos') ? $modulo->contratos : [],
             ]),
             'color' => $this->color,
             'logo' => $this->logo,

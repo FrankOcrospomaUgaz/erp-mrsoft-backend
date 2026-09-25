@@ -38,7 +38,7 @@
                 <td width="70%">{{ optional($comprobante->fecha_emision)->format('d/m/Y') }} {{ $comprobante->hora_emision }}</td>
             </tr>
             <tr>
-                <td class="bold">Senor(es):</td>
+                <td class="bold">Señor(es):</td>
                 <td>{{ $cliente?->razon_social ?: $cliente?->nombre_comercial ?: $contacto?->nombre ?: '-' }}</td>
             </tr>
             <tr>
