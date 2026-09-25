@@ -29,10 +29,15 @@ class ProductoResource extends JsonResource
             ]),
             'color' => $this->color,
             'logo' => $this->logo,
-            'formato_alta' => $this->formato_alta,
             'avisos_saas' => $this->avisos_saas,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];
+
+        if ($request->routeIs('productos.show') || $request->boolean('with_formato_alta')) {
+            $data['formato_alta'] = $this->formato_alta;
+        }
+
+        return $data;
     }
 }
