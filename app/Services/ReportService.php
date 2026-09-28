@@ -216,14 +216,18 @@ class ReportService
                 $contracts->count(),
                 (float) $debt,
             ];
-        })->values();
+        });
+        if ($request->boolean('solo_deudores')) {
+            $rows = $rows->filter(fn (array $row) => $row[8] > 0);
+        }
+        $rows = $rows->values();
 
         return $this->result(
             'Listado de clientes',
             'Clientes clasificados por servicio, producto, módulo y condición de deuda.',
             ['RUC', 'Cliente', 'Teléfono', 'Correo', 'Servicios', 'Productos', 'Módulos', 'Contratos', 'Deuda (S/)'],
             $rows,
-            ['cantidad' => $clients->count(), 'deudores' => $rows->filter(fn (array $row) => $row[8] > 0)->count(), 'deuda' => (float) $rows->sum(fn (array $row) => $row[8])],
+            ['cantidad' => $rows->count(), 'deudores' => $rows->filter(fn (array $row) => $row[8] > 0)->count(), 'deuda' => (float) $rows->sum(fn (array $row) => $row[8])],
             [8]
         );
     }

@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Exports\ProfessionalReportExport;
+use App\Models\Modulo;
+use App\Models\Producto;
 use App\Services\ReportService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -28,10 +30,7 @@ class ReportController extends Controller
     {
         $report = $this->reports->make($type, $request);
         $filename = Str::slug($report['title']).'-'.now()->format('Ymd-His').'.xlsx';
-        return Excel::download(new ProfessionalReportExport($report, $request->only([
-            'fecha_desde', 'fecha_hasta', 'campo_fecha', 'estado', 'situacion', 'servicio',
-            'producto_id', 'modulo_id', 'solo_deudores', 'buscar',
-        ])), $filename);
+        return Excel::download(new ProfessionalReportExport($report, $this->friendlyFilters($request)), $filename);
     }
 
     public function pdf(Request $request, string $type)
@@ -39,9 +38,27 @@ class ReportController extends Controller
         $report = $this->reports->make($type, $request);
         $pdf = Pdf::loadView('pdf.report', [
             'report' => $report,
-            'filters' => $request->only(['fecha_desde', 'fecha_hasta', 'campo_fecha', 'estado', 'situacion', 'servicio', 'solo_deudores', 'buscar']),
+            'filters' => $this->friendlyFilters($request),
         ])->setPaper('a4', 'landscape');
 
         return $pdf->stream(Str::slug($report['title']).'-'.now()->format('Ymd-His').'.pdf');
+    }
+
+    private function friendlyFilters(Request $request): array
+    {
+        $filters = $request->only([
+            'fecha_desde', 'fecha_hasta', 'campo_fecha', 'estado', 'situacion', 'servicio',
+            'producto_id', 'modulo_id', 'solo_deudores', 'buscar',
+        ]);
+        if (!empty($filters['producto_id'])) {
+            $filters['producto'] = Producto::withTrashed()->find($filters['producto_id'])?->nombre ?? $filters['producto_id'];
+            unset($filters['producto_id']);
+        }
+        if (!empty($filters['modulo_id'])) {
+            $filters['modulo'] = Modulo::withTrashed()->find($filters['modulo_id'])?->nombre ?? $filters['modulo_id'];
+            unset($filters['modulo_id']);
+        }
+
+        return array_filter($filters, fn ($value) => $value !== null && $value !== '' && $value !== false);
     }
 }
