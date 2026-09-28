@@ -36,6 +36,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('productos/{id}/formato-alta/pdf', [App\Http\Controllers\ProductoController::class, 'pdfFormatoAlta']);
 
     Route::middleware(AdminOnly::class)->group(function () {
+        Route::get('reportes/opciones', [App\Http\Controllers\ReportController::class, 'options']);
+        Route::get('reportes/{type}', [App\Http\Controllers\ReportController::class, 'show']);
+        Route::get('reportes/{type}/excel', [App\Http\Controllers\ReportController::class, 'excel']);
+        Route::get('reportes/{type}/pdf', [App\Http\Controllers\ReportController::class, 'pdf']);
         Route::get('/dashboard/resumen', [App\Http\Controllers\DashboardController::class, 'resumen']);
         Route::apiResource('tipo-usuarios', App\Http\Controllers\TipoUsuarioController::class);
         Route::apiResource('tipos-local', App\Http\Controllers\TipoLocalController::class);
