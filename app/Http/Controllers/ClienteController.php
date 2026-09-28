@@ -617,6 +617,7 @@ class ClienteController extends Controller
     private function createChildCliente(Cliente $parent, array $data): Cliente
     {
         $data = $this->applyInheritedContactFromParentData($parent, $data);
+        $data = $this->deduplicateChildRuc($parent, $data);
         $data['parent_cliente_id'] = $parent->id;
         $child = Cliente::create($this->extractClienteAttributes($data));
 
@@ -646,6 +647,7 @@ class ClienteController extends Controller
 
         foreach ($children as $childData) {
             $childData = $this->applyInheritedContactFromParentData($parent, $childData);
+            $childData = $this->deduplicateChildRuc($parent, $childData);
             $matchedChild = $this->findMatchingChild($existingChildren, $childData, $usedChildIds);
 
             if ($matchedChild) {
@@ -668,6 +670,23 @@ class ClienteController extends Controller
                 $this->deleteChildrenRecursively($child);
                 $child->delete();
             });
+    }
+
+    /**
+     * If a child's RUC is identical to its parent's RUC, set it to null.
+     * Locales (branches) operate under the empresa's RUC — storing it again
+     * would violate the unique constraint without adding value.
+     */
+    private function deduplicateChildRuc(Cliente $parent, array $data): array
+    {
+        $childRuc  = $this->emptyToNull($data['ruc'] ?? null);
+        $parentRuc = $this->emptyToNull($parent->ruc);
+
+        if ($childRuc !== null && $parentRuc !== null && $childRuc === $parentRuc) {
+            $data['ruc'] = null;
+        }
+
+        return $data;
     }
 
     private function findMatchingChild($existingChildren, array $childData, array $usedChildIds): ?Cliente
