@@ -248,6 +248,10 @@ class ClienteController extends Controller
                     'hijos_clientes.hijos_clientes',
                 ])),
             ], 201);
+        } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
+            DB::rollBack();
+            $msg = $this->friendlyUniqueError($e->getMessage());
+            return response()->json(['status' => 422, 'message' => $msg], 422);
         } catch (\Throwable $e) {
             DB::rollBack();
 
@@ -298,6 +302,10 @@ class ClienteController extends Controller
                     'hijos_clientes.hijos_clientes',
                 ])),
             ], 200);
+        } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
+            DB::rollBack();
+            $msg = $this->friendlyUniqueError($e->getMessage());
+            return response()->json(['status' => 422, 'message' => $msg], 422);
         } catch (\Throwable $e) {
             DB::rollBack();
 
@@ -476,6 +484,18 @@ class ClienteController extends Controller
                     : 'El usuario fue actualizado sin cambiar la contraseña.',
             ],
         ]);
+    }
+
+    private function friendlyUniqueError(string $dbMessage): string
+    {
+        if (str_contains($dbMessage, 'ruc')) {
+            // Extract the RUC from the DB error message if possible
+            if (preg_match('/Key \(ruc\)=\((\d+)\)/', $dbMessage, $m)) {
+                return "Ya existe un cliente registrado con el RUC {$m[1]}. Verifique que no se esté duplicando una empresa o local.​";
+            }
+            return 'Ya existe un cliente con ese RUC. No se puede registrar el mismo RUC dos veces.';
+        }
+        return 'Ya existe un registro duplicado. Verifique los datos e intente nuevamente.';
     }
 
     private function makeClienteValidator(array $data, ?int $clienteId = null)
