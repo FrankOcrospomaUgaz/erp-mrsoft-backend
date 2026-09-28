@@ -64,6 +64,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::apiResource('clientes', App\Http\Controllers\ClienteController::class);
         Route::get('clientes/{id}/sucursales', [App\Http\Controllers\ClienteController::class, 'sucursalesPorCliente']);
         Route::apiResource('pagos', App\Http\Controllers\PagoCuotumController::class);
+        Route::get('contactos/buscar-dni/{dni}', [App\Http\Controllers\ContactoController::class, 'buscarPorDni']);
+        Route::apiResource('contactos', App\Http\Controllers\ContactoController::class)->only(['index', 'show', 'update', 'destroy']);
         Route::post('contratos/{id}/firmas', [App\Http\Controllers\ContratoController::class, 'guardarFirmas']);
         Route::apiResource('contratos', App\Http\Controllers\ContratoController::class)->only(['store', 'update', 'destroy']);
         Route::post('cuotas/{cuota}/reenviar-factura', [App\Http\Controllers\CuotaController::class, 'reenviarFactura']);

@@ -616,7 +616,7 @@ class ClienteController extends Controller
 
     private function createChildCliente(Cliente $parent, array $data): Cliente
     {
-        $data = $this->applyInheritedContact($parent, $data);
+        $data = $this->applyInheritedContactFromParentData($parent, $data);
         $data['parent_cliente_id'] = $parent->id;
         $child = Cliente::create($this->extractClienteAttributes($data));
 
@@ -645,7 +645,7 @@ class ClienteController extends Controller
         $usedChildIds = [];
 
         foreach ($children as $childData) {
-            $childData = $this->applyInheritedContact($parent, $childData);
+            $childData = $this->applyInheritedContactFromParentData($parent, $childData);
             $matchedChild = $this->findMatchingChild($existingChildren, $childData, $usedChildIds);
 
             if ($matchedChild) {
@@ -713,6 +713,9 @@ class ClienteController extends Controller
         return $availableChildren->first();
     }
 
+    /**
+     * Apply inherited contact from a persisted parent (reads from DB first, falls back to model attributes).
+     */
     private function applyInheritedContact(Cliente $parent, array $data): array
     {
         if (!(bool) ($data['contacto_igual_empresa'] ?? false)) {
@@ -728,6 +731,40 @@ class ClienteController extends Controller
             'es_dueno' => (bool) ($parentContact?->es_dueno),
             'es_vendedor' => (bool) ($parentContact?->es_vendedor),
         ];
+
+        $data['contacto'] = $contact;
+        $data['contactos'] = [$contact];
+
+        return $data;
+    }
+
+    /**
+     * Apply inherited contact using both the persisted parent model AND its in-memory contacto data.
+     * This ensures the chain corporación→empresa→local works even when the parent was just created
+     * and its contacto may be in $data['contacto'] (not yet in DB) or the passed-in resolved contact.
+     */
+    private function applyInheritedContactFromParentData(Cliente $parent, array $data): array
+    {
+        if (!(bool) ($data['contacto_igual_empresa'] ?? false)) {
+            return $data;
+        }
+
+        // Try DB first (covers update case and already-persisted parents)
+        $parentContact = $parent->contactos_clientes()->oldest('id')->first();
+
+        $contact = [
+            'dni' => $parentContact?->dni ?? $parent->dueno_nombre,
+            'nombre' => $parentContact?->nombre ?? $parent->dueno_nombre,
+            'celular' => $parentContact?->celular ?? $parent->dueno_celular,
+            'email' => $parentContact?->email ?? $parent->dueno_email,
+            'es_dueno' => (bool) ($parentContact?->es_dueno),
+            'es_vendedor' => (bool) ($parentContact?->es_vendedor),
+        ];
+
+        // Correct dni from parent contact record
+        if ($parentContact) {
+            $contact['dni'] = $parentContact->dni;
+        }
 
         $data['contacto'] = $contact;
         $data['contactos'] = [$contact];
@@ -986,7 +1023,8 @@ class ClienteController extends Controller
                 $validator->errors()->add("{$childPath}.tipos_local", 'Debe seleccionar al menos un tipo para el local.');
             }
 
-            if (empty($child['contacto']['nombre'])) {
+            // Skip contact validation if the child inherits it from its parent
+            if (!(bool) ($child['contacto_igual_empresa'] ?? false) && empty($child['contacto']['nombre'])) {
                 $validator->errors()->add("{$childPath}.contacto.nombre", 'El nombre completo del contacto es obligatorio.');
             }
 
