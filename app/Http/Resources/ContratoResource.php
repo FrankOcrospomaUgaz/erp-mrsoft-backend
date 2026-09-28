@@ -21,6 +21,8 @@ class ContratoResource extends JsonResource
             'total'        => $this->total,
             'forma_pago'   => $this->forma_pago,
             'estado'       => $this->estado,
+            'no_facturado' => (bool) $this->no_facturado,
+            'no_facturado_efectivo' => $this->noDebeFacturarse(),
             'periodicidad_cuota' => $this->periodicidad_cuota,
             'motivo_anulacion' => $this->motivo_anulacion,
             'fecha_anulacion' => $this->fecha_anulacion,

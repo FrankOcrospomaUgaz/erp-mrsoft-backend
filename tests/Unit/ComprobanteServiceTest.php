@@ -5,16 +5,48 @@ namespace Tests\Unit;
 use App\Models\Cliente;
 use App\Models\Comprobante;
 use App\Models\ComprobanteDetalle;
+use App\Models\Contrato;
 use App\Models\Facturador;
 use App\Services\Facturacion\ComprobanteService;
 use App\Services\Facturacion\SunatClient;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Collection;
-use PHPUnit\Framework\TestCase;
+use Tests\TestCase;
 use ReflectionMethod;
+use Illuminate\Validation\ValidationException;
 
 class ComprobanteServiceTest extends TestCase
 {
+    public function test_bloquea_facturacion_si_el_cliente_o_su_padre_esta_marcado(): void
+    {
+        $parent = (new Cliente())->forceFill(['id' => 10, 'no_facturado' => true]);
+        $parent->setRelation('parent_cliente', null);
+        $client = (new Cliente())->forceFill(['id' => 11, 'no_facturado' => false]);
+        $client->setRelation('parent_cliente', $parent);
+
+        $service = new ComprobanteService(new SunatClient());
+        $method = new ReflectionMethod($service, 'validarPermisoFacturacion');
+        $method->setAccessible(true);
+
+        $this->expectException(ValidationException::class);
+        $method->invoke($service, $client, null);
+    }
+
+    public function test_bloquea_solo_el_contrato_marcado_como_no_facturado(): void
+    {
+        $client = (new Cliente())->forceFill(['id' => 11, 'no_facturado' => false]);
+        $client->setRelation('parent_cliente', null);
+        $contract = (new Contrato())->forceFill(['cliente_id' => 11, 'no_facturado' => true]);
+        $contract->setRelation('cliente', $client);
+
+        $service = new ComprobanteService(new SunatClient());
+        $method = new ReflectionMethod($service, 'validarPermisoFacturacion');
+        $method->setAccessible(true);
+
+        $this->expectException(ValidationException::class);
+        $method->invoke($service, $client, $contract);
+    }
+
     public function test_desglosa_el_igv_sin_incrementar_el_precio_final(): void
     {
         $service = new ComprobanteService(new SunatClient());

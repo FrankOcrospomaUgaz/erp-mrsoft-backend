@@ -4,6 +4,7 @@ namespace App\Services\Facturacion;
 
 use App\Models\Cliente;
 use App\Models\Comprobante;
+use App\Models\Contrato;
 use App\Models\Facturador;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -20,6 +21,10 @@ class ComprobanteService
     {
         return DB::transaction(function () use ($data, $emitir) {
             $cliente = Cliente::with('contactos_clientes')->findOrFail($data['cliente_id']);
+            $contrato = !empty($data['contrato_id'])
+                ? Contrato::with('cliente.parent_cliente.parent_cliente')->findOrFail($data['contrato_id'])
+                : null;
+            $this->validarPermisoFacturacion($cliente, $contrato);
             $tipoDocumento = $data['tipo_documento'] ?? 'F';
             $serie = strtoupper($data['serie'] ?? ($tipoDocumento === 'F' ? 'F001' : 'B001'));
             $facturador = $this->resolveFacturador($data['facturador_id'] ?? null);
@@ -67,13 +72,15 @@ class ComprobanteService
     public function emitir(Comprobante $comprobante): Comprobante
     {
         return DB::transaction(function () use ($comprobante) {
-            $comprobante = Comprobante::with(['cliente.contactos_clientes', 'detalles', 'facturador'])
+            $comprobante = Comprobante::with(['cliente.parent_cliente.parent_cliente', 'cliente.contactos_clientes', 'contrato.cliente.parent_cliente.parent_cliente', 'detalles', 'facturador'])
                 ->lockForUpdate()
                 ->findOrFail($comprobante->id);
 
             if (in_array($comprobante->estado, ['M', 'T'], true)) {
                 return $comprobante;
             }
+
+            $this->validarPermisoFacturacion($comprobante->cliente, $comprobante->contrato);
 
             $hoyFiscal = Carbon::now(config('facturacion.timezone', 'America/Lima'))->startOfDay();
             if ($comprobante->fecha_emision->startOfDay()->greaterThan($hoyFiscal)) {
@@ -250,6 +257,21 @@ class ComprobanteService
         if ($tipoDocumento === 'F' && !preg_match('/^\d{11}$/', (string) $rucResolvido)) {
             throw ValidationException::withMessages([
                 'cliente_id' => 'Para emitir factura el cliente debe tener RUC de 11 digitos.',
+            ]);
+        }
+    }
+
+    private function validarPermisoFacturacion(Cliente $cliente, ?Contrato $contrato = null): void
+    {
+        if ($contrato && (int) $contrato->cliente_id !== (int) $cliente->id) {
+            throw ValidationException::withMessages([
+                'contrato_id' => 'El contrato seleccionado no pertenece al cliente.',
+            ]);
+        }
+
+        if (($contrato && $contrato->noDebeFacturarse()) || $cliente->noDebeFacturarse()) {
+            throw ValidationException::withMessages([
+                'facturacion' => 'Este cliente o contrato está marcado como No facturado. La deuda y los pagos se controlan normalmente, pero no se permite emitir comprobantes.',
             ]);
         }
     }

@@ -20,6 +20,7 @@ class Contrato extends Model
         'total',
         'forma_pago',
         'estado',
+        'no_facturado',
         'periodicidad_cuota',
         'motivo_anulacion',
         'fecha_anulacion',
@@ -38,6 +39,7 @@ class Contrato extends Model
         'total' => 'decimal:2',
         'forma_pago' => 'string',
         'estado' => 'string',
+        'no_facturado' => 'boolean',
         'periodicidad_cuota' => 'string',
         'fecha_anulacion' => 'date',
     ];
@@ -54,6 +56,7 @@ class Contrato extends Model
         'total' => 'required|numeric',
         'forma_pago' => 'required|string|max:255',
         'estado' => 'nullable|string|max:255',
+        'no_facturado' => 'nullable|boolean',
         'periodicidad_cuota' => 'nullable|string|max:255',
         'motivo_anulacion' => 'nullable|string',
         'fecha_anulacion' => 'nullable|date',
@@ -75,6 +78,11 @@ class Contrato extends Model
     public function contratoProductoModulos(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
         return $this->hasMany(\App\Models\ContratoProductoModulo::class, 'contrato_id');
+    }
+
+    public function noDebeFacturarse(): bool
+    {
+        return (bool) $this->no_facturado || (bool) $this->cliente?->noDebeFacturarse();
     }
 
     	public function notificaciones()

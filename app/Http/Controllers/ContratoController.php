@@ -1030,6 +1030,7 @@ class ContratoController extends Controller
             'total' => $prefix . 'numeric|min:0',
             'forma_pago' => $prefix . 'string|in:unico,parcial',
             'periodicidad_cuota' => $prefix . 'string|in:mensual,anual',
+            'no_facturado' => 'nullable|boolean',
             'productos_modulos' => 'nullable|array',
             'productos_modulos.*.producto_id' => 'required_with:productos_modulos|exists:productos,id',
             'productos_modulos.*.modulo_id' => 'required_with:productos_modulos|exists:modulos,id',
@@ -1094,6 +1095,7 @@ class ContratoController extends Controller
             'total',
             'forma_pago',
             'periodicidad_cuota',
+            'no_facturado',
         ]);
 
         if (($request->input('periodicidad_cuota') ?? null) === 'anual') {

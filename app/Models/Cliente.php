@@ -55,6 +55,7 @@ class Cliente extends Model
 		'dueno_es_representante',
 		'dueno_es_responsable',
 		'contacto_igual_empresa',
+		'no_facturado',
 		'representante_nombre',
 		'representante_celular',
 		'representante_email',
@@ -69,7 +70,17 @@ class Cliente extends Model
 		'dueno_es_representante' => 'bool',
 		'dueno_es_responsable' => 'bool',
 		'contacto_igual_empresa' => 'bool',
+		'no_facturado' => 'bool',
 	];
+
+	public function noDebeFacturarse(): bool
+	{
+		if ((bool) $this->no_facturado) {
+			return true;
+		}
+
+		return $this->parent_cliente ? $this->parent_cliente->noDebeFacturarse() : false;
+	}
 
 	public function contactos_clientes()
 	{

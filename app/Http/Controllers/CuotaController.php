@@ -329,6 +329,14 @@ class CuotaController extends Controller
             return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
         }
 
+        $cuota->loadMissing('contrato.cliente.parent_cliente.parent_cliente');
+        if ($cuota->contrato?->noDebeFacturarse()) {
+            return response()->json([
+                'status' => 422,
+                'message' => 'Este contrato está marcado como No facturado. Puede registrar pagos y controlar la deuda, pero no generar facturas.',
+            ], 422);
+        }
+
         $modo = $request->get('modo', 'sistema');
 
         if ($modo === 'manual') {

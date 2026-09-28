@@ -37,6 +37,8 @@ class ClienteResource extends JsonResource
             'dueno_es_representante' => $this->dueno_es_representante,
             'dueno_es_responsable' => $this->dueno_es_responsable,
             'contacto_igual_empresa' => $this->contacto_igual_empresa,
+            'no_facturado' => (bool) $this->no_facturado,
+            'no_facturado_efectivo' => $this->noDebeFacturarse(),
             'representante_nombre' => $this->representante_nombre,
             'representante_celular' => $this->representante_celular,
             'representante_email' => $this->representante_email,

@@ -501,6 +501,7 @@ class ClienteController extends Controller
                 'max:255',
             ],
             'tipos_local' => ['nullable', 'array'],
+            'no_facturado' => ['nullable', 'boolean'],
             'tipos_local.*' => ['string', Rule::exists('tipos_locales', 'codigo')->whereNull('deleted_at')],
             'contacto' => ['required', 'array'],
             'contacto.dni' => ['nullable', 'string', 'max:20'],
@@ -560,6 +561,7 @@ class ClienteController extends Controller
         $data['dueno_es_representante'] = false;
         $data['dueno_es_responsable'] = false;
         $data['contacto_igual_empresa'] = (bool) ($data['contacto_igual_empresa'] ?? false);
+        $data['no_facturado'] = (bool) ($data['no_facturado'] ?? false);
         $data['representante_nombre'] = null;
         $data['representante_celular'] = null;
         $data['representante_email'] = null;
@@ -583,6 +585,7 @@ class ClienteController extends Controller
             'nombre_comercial',
             'direccion',
             'tipos_local',
+            'no_facturado',
         ]) + [
             'dueno_nombre' => $contacto['nombre'] ?? null,
             'dueno_celular' => $contacto['celular'] ?? null,
@@ -613,6 +616,7 @@ class ClienteController extends Controller
 
     private function createChildCliente(Cliente $parent, array $data): Cliente
     {
+        $data = $this->applyInheritedContact($parent, $data);
         $data['parent_cliente_id'] = $parent->id;
         $child = Cliente::create($this->extractClienteAttributes($data));
 
@@ -641,6 +645,7 @@ class ClienteController extends Controller
         $usedChildIds = [];
 
         foreach ($children as $childData) {
+            $childData = $this->applyInheritedContact($parent, $childData);
             $matchedChild = $this->findMatchingChild($existingChildren, $childData, $usedChildIds);
 
             if ($matchedChild) {
@@ -706,6 +711,28 @@ class ClienteController extends Controller
         }
 
         return $availableChildren->first();
+    }
+
+    private function applyInheritedContact(Cliente $parent, array $data): array
+    {
+        if (!(bool) ($data['contacto_igual_empresa'] ?? false)) {
+            return $data;
+        }
+
+        $parentContact = $parent->contactos_clientes()->oldest('id')->first();
+        $contact = [
+            'dni' => $parentContact?->dni,
+            'nombre' => $parentContact?->nombre ?? $parent->dueno_nombre,
+            'celular' => $parentContact?->celular ?? $parent->dueno_celular,
+            'email' => $parentContact?->email ?? $parent->dueno_email,
+            'es_dueno' => (bool) ($parentContact?->es_dueno),
+            'es_vendedor' => (bool) ($parentContact?->es_vendedor),
+        ];
+
+        $data['contacto'] = $contact;
+        $data['contactos'] = [$contact];
+
+        return $data;
     }
 
     private function deleteChildrenRecursively(Cliente $cliente): void
@@ -906,6 +933,7 @@ class ClienteController extends Controller
             $child['dueno_es_representante'] = false;
             $child['dueno_es_responsable'] = false;
             $child['contacto_igual_empresa'] = (bool) ($child['contacto_igual_empresa'] ?? false);
+            $child['no_facturado'] = (bool) ($child['no_facturado'] ?? false);
             $child['representante_nombre'] = null;
             $child['representante_celular'] = null;
             $child['representante_email'] = null;

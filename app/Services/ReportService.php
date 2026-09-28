@@ -61,16 +61,17 @@ class ReportService
             optional($contract->fecha_inicio)->format('d/m/Y'),
             optional($contract->fecha_fin)->format('d/m/Y'),
             $this->label($contract->estado ?: 'activo'),
+            $contract->noDebeFacturarse() ? 'No facturado' : 'Facturable',
             (float) $contract->total,
         ])->values();
 
         return $this->result(
             'Contratos por estado y situación',
             'Detalle contractual con estado, vigencia, servicio e importe.',
-            ['Contrato', 'Cliente', 'RUC', 'Servicio', 'Emisión', 'Inicio', 'Vencimiento', 'Estado', 'Total (S/)'],
+            ['Contrato', 'Cliente', 'RUC', 'Servicio', 'Emisión', 'Inicio', 'Vencimiento', 'Estado', 'Facturación', 'Total (S/)'],
             $rows,
             ['cantidad' => $contracts->count(), 'total' => (float) $contracts->sum('total')],
-            [8]
+            [9]
         );
     }
 
@@ -214,21 +215,22 @@ class ReportService
                 $pivots->pluck('producto.nombre')->filter()->unique()->implode(', '),
                 $pivots->pluck('modulo.nombre')->filter()->unique()->implode(', '),
                 $contracts->count(),
+                $client->noDebeFacturarse() ? 'No facturado' : 'Facturable',
                 (float) $debt,
             ];
         });
         if ($request->boolean('solo_deudores')) {
-            $rows = $rows->filter(fn (array $row) => $row[8] > 0);
+            $rows = $rows->filter(fn (array $row) => $row[9] > 0);
         }
         $rows = $rows->values();
 
         return $this->result(
             'Listado de clientes',
             'Clientes clasificados por servicio, producto, módulo y condición de deuda.',
-            ['RUC', 'Cliente', 'Teléfono', 'Correo', 'Servicios', 'Productos', 'Módulos', 'Contratos', 'Deuda (S/)'],
+            ['RUC', 'Cliente', 'Teléfono', 'Correo', 'Servicios', 'Productos', 'Módulos', 'Contratos', 'Facturación', 'Deuda (S/)'],
             $rows,
-            ['cantidad' => $rows->count(), 'deudores' => $rows->filter(fn (array $row) => $row[8] > 0)->count(), 'deuda' => (float) $rows->sum(fn (array $row) => $row[8])],
-            [8]
+            ['cantidad' => $rows->count(), 'deudores' => $rows->filter(fn (array $row) => $row[9] > 0)->count(), 'deuda' => (float) $rows->sum(fn (array $row) => $row[9])],
+            [9]
         );
     }
 
@@ -243,16 +245,17 @@ class ReportService
             optional($contract->fecha_fin)->format('d/m/Y'),
             $this->label($contract->tipo_contrato),
             $this->label($contract->estado ?: 'activo'),
+            $contract->noDebeFacturarse() ? 'No facturado' : 'Facturable',
             (float) $contract->total,
         ])->values();
 
         return $this->result(
             'Contratos por fechas',
             'Contratos por fecha de emisión, inicio o vencimiento.',
-            ['Contrato', 'Cliente', 'Emisión', 'Inicio', 'Vencimiento', 'Servicio', 'Estado', 'Total (S/)'],
+            ['Contrato', 'Cliente', 'Emisión', 'Inicio', 'Vencimiento', 'Servicio', 'Estado', 'Facturación', 'Total (S/)'],
             $rows,
             ['cantidad' => $contracts->count(), 'total' => (float) $contracts->sum('total')],
-            [7]
+            [8]
         );
     }
 
