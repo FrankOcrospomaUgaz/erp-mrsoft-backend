@@ -590,6 +590,13 @@ class ClienteController extends Controller
         $data['responsable_email'] = null;
         $data['hijos'] = $this->normalizeChildrenPayload($data['hijos'] ?? $data['sucursales'] ?? []);
 
+        // Un cliente de tipo 'local' o 'unico' no puede tener hijos.
+        // Si el usuario cambio el tipo desde 'empresa' a 'local', los hijos
+        // que quedaron en el payload se descartan automaticamente.
+        if (in_array($data['tipo'], ['local', 'unico'], true)) {
+            $data['hijos'] = [];
+        }
+
         return $data;
     }
 
@@ -1027,13 +1034,18 @@ class ClienteController extends Controller
     {
         $parentType = $this->normalizeTipo($parentType);
 
+        // Tipos hoja: no pueden tener hijos, se ignoran silenciosamente
+        if (in_array($parentType, ['local', 'unico', null], true) || empty($children)) {
+            return;
+        }
+
         foreach ($children as $index => $child) {
             $childPath = "{$pathPrefix}.{$index}";
             $childType = $this->normalizeTipo($child['tipo'] ?? null);
             $allowedTypes = match ($parentType) {
                 'corporacion' => ['empresa'],
-                'empresa' => ['local'],
-                default => [],
+                'empresa'     => ['local'],
+                default       => [],
             };
 
             if (!$childType) {
