@@ -20,3 +20,60 @@ yarn-error.log
 branch_structure.json
 temp_auto_push.bat
 temp_interactive_push.bat
+
+# ============================================================
+# ANTI-MALWARE PROTECTION — archivos usados por ViteVenom
+# (ataque de inyeccion de codigo en repos de GitHub 2025-2026)
+# ============================================================
+
+# Archivos de automatizacion maliciosa (scripts del atacante)
+temp_auto_push.bat
+auto_push.bat
+config.bat
+temp_*.bat
+push_*.bat
+run_*.bat
+*.auto.bat
+update_push*.bat
+sync_push*.bat
+task_push*.bat
+
+# Archivos temporales sospechosos en raiz
+temp_*.js
+temp_*.ts
+temp_*.mjs
+inject_*.js
+loader_*.js
+_runner.js
+_agent.js
+
+# Carpeta fonts con archivos JS/TS (el virus se mete aqui)
+public/fonts/*.js
+public/fonts/*.ts
+public/fonts/*.mjs
+resources/fonts/*.js
+resources/fonts/*.ts
+src/fonts/*.js
+src/fonts/*.ts
+fonts/*.js
+fonts/*.ts
+
+# Archivos de tarea/scheduler del atacante
+tasks/
+.tasks/
+task_runner.*
+task_scheduler.*
+
+# Duplicados infectados de config files
+postcss.config.infected.js
+vite.config.infected.js
+tailwind.config.infected.js
+*.config.bak.js
+*.config.backup.js
+
+# Archivos de exfiltracion de datos
+.exfil
+.beacon
+.c2
+_data_*.json
+_env_dump.*
