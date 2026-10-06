@@ -47,4 +47,12 @@ return [
         'template_name' => env('META_WHATSAPP_TEMPLATE', 'hotelhub_pdf_invoice'),
     ],
 
+    'kuti' => [
+        'base_url' => env('KUTI_BASE_URL', 'https://api.kuti.pe/v1'),
+        'secret_key' => env('KUTI_SECRET_KEY'),
+        'webhook_secret' => env('KUTI_WEBHOOK_SECRET'),
+        'success_url' => env('KUTI_SUCCESS_URL'),
+        'timeout' => env('KUTI_TIMEOUT', 20),
+    ],
+
 ];

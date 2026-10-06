@@ -16,6 +16,7 @@ use App\Http\Middleware\AdminOnly;
 |
 */
 Route::post('/login', [AuthController::class, 'login']);
+Route::post('/webhooks/kuti', [App\Http\Controllers\KutiWebhookController::class, 'handle']);
 Route::middleware('auth:sanctum')->get('/authenticate', [AuthController::class, 'authenticate']);
 
 Route::middleware('auth:sanctum')->group(function () {
@@ -33,6 +34,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('contratos', App\Http\Controllers\ContratoController::class)->only(['index', 'show']);
     Route::post('contratos/{id}/firmar-cliente', [App\Http\Controllers\ContratoController::class, 'firmarCliente']);
     Route::apiResource('cuotas', App\Http\Controllers\CuotaController::class)->only(['index', 'show']);
+    Route::post('cuotas/{cuota}/kuti-checkout', [App\Http\Controllers\KutiPaymentController::class, 'checkout']);
+    Route::post('cuotas/{cuota}/kuti-confirm', [App\Http\Controllers\KutiPaymentController::class, 'confirm']);
     Route::get('productos/{id}/formato-alta/pdf', [App\Http\Controllers\ProductoController::class, 'pdfFormatoAlta']);
 
     Route::middleware(AdminOnly::class)->group(function () {
