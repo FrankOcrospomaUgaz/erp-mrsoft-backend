@@ -53,6 +53,7 @@ return [
         'webhook_secret' => env('KUTI_WEBHOOK_SECRET'),
         'success_url' => env('KUTI_SUCCESS_URL'),
         'timeout' => env('KUTI_TIMEOUT', 20),
+        'charge_time' => env('KUTI_CHARGE_TIME', '09:00'),
     ],
 
 ];
