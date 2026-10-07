@@ -9,13 +9,22 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Resources\PagosCuotumResource;
 use App\Models\Cuota;
+use App\Models\Configuracion;
+use App\Mail\ManualPaymentSubmittedMail;
+use App\Mail\ManualPaymentDecisionMail;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
 
 class PagoCuotumController extends Controller
 {
 
     public function index(Request $request)
     {
-        $query = PagosCuotum::with('cuota');
+        $query = PagosCuotum::with(['cuota.contrato.cliente']);
+
+        if ($request->filled('estado_revision')) {
+            $query->where('estado_revision', $request->get('estado_revision'));
+        }
 
         // 🔍 Búsqueda por comprobante
         if ($request->filled('search')) {
@@ -65,6 +74,110 @@ class PagoCuotumController extends Controller
         ]);
     }
 
+    public function storeManual(Request $request, Cuota $cuota)
+    {
+        $clienteIds = $this->accessibleClienteIds($request);
+        $cuota->load('contrato');
+        if (!$clienteIds || !in_array((int) $cuota->contrato?->cliente_id, $clienteIds, true)) {
+            return response()->json(['message' => 'No autorizado'], 403);
+        }
+
+        $validated = $request->validate([
+            'fecha_pago' => ['required', 'date'],
+            'monto_pagado' => ['required', 'numeric', 'min:0.01'],
+            'comprobante' => ['required', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:5120'],
+        ]);
+
+        if ($cuota->situacion === 'pagado') {
+            return response()->json(['message' => 'Esta cuota ya fue pagada.'], 422);
+        }
+
+        $aprobado = PagosCuotum::where('cuota_id', $cuota->id)->where('estado_revision', 'aprobado')->sum('monto_pagado');
+        $pendiente = PagosCuotum::where('cuota_id', $cuota->id)->where('estado_revision', 'pendiente')->exists();
+        if ($pendiente) {
+            return response()->json(['message' => 'Ya existe un comprobante pendiente de revisión para esta cuota.'], 422);
+        }
+        if ($aprobado + (float) $validated['monto_pagado'] > (float) $cuota->monto) {
+            return response()->json(['message' => 'El importe supera el saldo pendiente de la cuota.'], 422);
+        }
+
+        $pago = PagosCuotum::create([
+            'cuota_id' => $cuota->id,
+            'fecha_pago' => $validated['fecha_pago'],
+            'monto_pagado' => $validated['monto_pagado'],
+            'comprobante' => $request->file('comprobante')->store('comprobantes', 'public'),
+            'metodo_pago' => 'manual',
+            'estado_revision' => 'pendiente',
+        ]);
+
+        $notificationEmail = Configuracion::where('clave', 'manual_payment_notification_email')->value('valor') ?: env('PAYMENT_REVIEW_EMAIL');
+        if ($notificationEmail) {
+            try {
+                Mail::to($notificationEmail)->send(new ManualPaymentSubmittedMail($pago, rtrim(env('CLIENT_APP_URL', config('app.url')), '/') . '/pagos-por-aprobar?pago=' . $pago->id));
+            } catch (\Throwable $exception) {
+                Log::error('No se pudo enviar aviso de nuevo comprobante.', ['pago_id' => $pago->id, 'error' => $exception->getMessage()]);
+            }
+        }
+
+        return response()->json(['message' => 'Comprobante enviado. Quedará pendiente de validación.', 'data' => new PagosCuotumResource($pago)], 201);
+    }
+
+    public function approve(Request $request, PagosCuotum $pago)
+    {
+        if ($pago->estado_revision !== 'pendiente') {
+            return response()->json(['message' => 'Este comprobante ya fue revisado.'], 422);
+        }
+
+        $validated = $request->validate(['observacion_revision' => ['nullable', 'string', 'max:1000']]);
+        DB::transaction(function () use ($request, $pago, $validated) {
+            $cuota = Cuota::lockForUpdate()->findOrFail($pago->cuota_id);
+            $approvedTotal = PagosCuotum::where('cuota_id', $cuota->id)->where('estado_revision', 'aprobado')->sum('monto_pagado');
+            if ($approvedTotal + (float) $pago->monto_pagado > (float) $cuota->monto) {
+                abort(422, 'La aprobación supera el importe pendiente de la cuota.');
+            }
+            $pago->update(['estado_revision' => 'aprobado', 'observacion_revision' => $validated['observacion_revision'] ?? null, 'revisado_por' => $request->user()->id, 'revisado_at' => now()]);
+            $total = $approvedTotal + (float) $pago->monto_pagado;
+            $cuota->update([
+                'situacion' => round($total, 2) >= round((float) $cuota->monto, 2) ? 'pagado' : $cuota->situacion,
+                'fecha_pago' => round($total, 2) >= round((float) $cuota->monto, 2) ? $pago->fecha_pago : $cuota->fecha_pago,
+            ]);
+        });
+
+        $this->notifyClientDecision($pago, true, $validated['observacion_revision'] ?? null);
+
+        return response()->json(['message' => 'Comprobante aprobado y cuota actualizada.']);
+    }
+
+    public function reject(Request $request, PagosCuotum $pago)
+    {
+        if ($pago->estado_revision !== 'pendiente') {
+            return response()->json(['message' => 'Este comprobante ya fue revisado.'], 422);
+        }
+        $validated = $request->validate(['observacion_revision' => ['nullable', 'string', 'max:1000']]);
+        $pago->update(['estado_revision' => 'rechazado', 'motivo_rechazo' => $validated['observacion_revision'] ?? null, 'observacion_revision' => $validated['observacion_revision'] ?? null, 'revisado_por' => $request->user()->id, 'revisado_at' => now()]);
+        $this->notifyClientDecision($pago, false, $validated['observacion_revision'] ?? null);
+        return response()->json(['message' => 'Comprobante rechazado.']);
+    }
+
+    private function notifyClientDecision(PagosCuotum $pago, bool $approved, ?string $comment): void
+    {
+        $pago->loadMissing('cuota.contrato.cliente');
+        $cliente = $pago->cuota?->contrato?->cliente;
+        $email = $cliente?->dueno_email ?: $cliente?->representante_email;
+        if (!$email) return;
+        try {
+            Mail::to($email)->send(new ManualPaymentDecisionMail($pago, $approved, $comment));
+        } catch (\Throwable $exception) {
+            Log::error('No se pudo enviar decisión de comprobante al cliente.', ['pago_id' => $pago->id, 'error' => $exception->getMessage()]);
+        }
+    }
+
+    private function accessibleClienteIds(Request $request): array
+    {
+        $clienteId = $request->user()?->cliente_id;
+        return $clienteId ? [$clienteId] : [];
+    }
+
 public function store(Request $request)
 {
     $messages = [
@@ -104,7 +217,7 @@ public function store(Request $request)
         }
 
         // Calcular suma de pagos previos
-        $totalPagosPrevios = PagosCuotum::where('cuota_id', $cuota->id)->sum('monto_pagado');
+        $totalPagosPrevios = PagosCuotum::where('cuota_id', $cuota->id)->where('estado_revision', 'aprobado')->sum('monto_pagado');
         $nuevoTotal = $totalPagosPrevios + $request->monto_pagado;
 
         // Validar que no se exceda del monto de la cuota
@@ -127,6 +240,8 @@ public function store(Request $request)
             'fecha_pago'   => $request->fecha_pago,
             'monto_pagado' => $request->monto_pagado,
             'comprobante'  => $rutaComprobante,
+            'metodo_pago' => 'manual',
+            'estado_revision' => 'aprobado',
         ]);
 
         // Determinar si se completó la cuota
@@ -184,10 +299,8 @@ public function store(Request $request)
     /**
      * Método para mostrar el comprobante directamente
      */
-    public function mostrarComprobante($id)
+    public function mostrarComprobante(PagosCuotum $pago)
     {
-        $pago = PagosCuotum::find($id);
-
         if (!$pago || !$pago->comprobante) {
             return response()->json([
                 'status' => 404,

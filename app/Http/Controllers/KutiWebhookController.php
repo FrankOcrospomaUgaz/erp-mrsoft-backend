@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Cuota;
+use App\Models\Contrato;
 use App\Models\PagosCuotum;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -22,6 +23,10 @@ class KutiWebhookController extends Controller
 
         $payload = json_decode($raw, true);
         if (!is_array($payload)) return response()->json(['message' => 'Payload inválido'], 400);
+        if ($payload['type'] === 'subscription.payment_succeeded') {
+            $this->applySubscriptionPayment($payload['data']['subscription'] ?? []);
+            return response()->json(['ok' => true]);
+        }
         if ($payload['type'] !== 'payment.succeeded') return response()->json(['ok' => true]);
 
         $intent = $payload['data']['payment_intent'] ?? [];
@@ -54,5 +59,42 @@ class KutiWebhookController extends Controller
         });
 
         return response()->json(['ok' => true]);
+    }
+
+    private function applySubscriptionPayment(array $subscription): void
+    {
+        $contractId = (int) data_get($subscription, 'metadata.contrato_id');
+        $intentId = data_get($subscription, 'latest_cycle.payment_intent_id');
+        $amount = (float) data_get($subscription, 'latest_cycle.amount.amount', 0);
+        if (!$contractId || !$intentId || $amount <= 0) return;
+
+        DB::transaction(function () use ($contractId, $intentId, $amount, $subscription) {
+            $contract = Contrato::lockForUpdate()->with(['cuotas.pagos_cuota'])->find($contractId);
+            if (!$contract) return;
+            $quota = $contract->cuotas
+                ->sortBy('fecha_vencimiento')
+                ->first(fn ($item) => round((float) $item->monto - (float) $item->pagos_cuota->sum('monto_pagado'), 2) > 0);
+            if (!$quota || PagosCuotum::where('comprobante', 'KUTI:' . $intentId)->exists()) return;
+
+            $paid = (float) $quota->pagos_cuota->sum('monto_pagado');
+            $toApply = min($amount, round((float) $quota->monto - $paid, 2));
+            if ($toApply <= 0) return;
+            PagosCuotum::create([
+                'cuota_id' => $quota->id,
+                'fecha_pago' => now(),
+                'monto_pagado' => $toApply,
+                'comprobante' => 'KUTI:' . $intentId,
+            ]);
+            $total = round($paid + $toApply, 2);
+            $quota->update([
+                'situacion' => $total >= round((float) $quota->monto, 2) ? 'pagado' : 'pendiente',
+                'fecha_pago' => $total >= round((float) $quota->monto, 2) ? now() : null,
+            ]);
+            $contract->update([
+                'kuti_subscription_status' => data_get($subscription, 'status', 'ACTIVE'),
+                'kuti_subscription_next_charge_at' => data_get($subscription, 'next_charge_at'),
+                'kuti_subscription_amount' => data_get($subscription, 'amount.amount', $contract->kuti_subscription_amount),
+            ]);
+        });
     }
 }

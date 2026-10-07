@@ -26,6 +26,13 @@ class Contrato extends Model
         'fecha_anulacion',
         'firma_arrendador',
         'firma_cliente',
+        'kuti_subscription_id',
+        'kuti_subscription_status',
+        'kuti_subscription_checkout_url',
+        'kuti_subscription_frequency',
+        'kuti_subscription_amount',
+        'kuti_subscription_next_charge_at',
+        'kuti_subscription_charge_time',
     ];
 
     protected $casts = [
@@ -42,6 +49,8 @@ class Contrato extends Model
         'no_facturado' => 'boolean',
         'periodicidad_cuota' => 'string',
         'fecha_anulacion' => 'date',
+        'kuti_subscription_amount' => 'decimal:2',
+        'kuti_subscription_next_charge_at' => 'datetime',
     ];
 
     public static array $rules = [

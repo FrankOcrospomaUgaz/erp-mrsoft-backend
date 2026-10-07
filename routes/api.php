@@ -36,6 +36,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('cuotas', App\Http\Controllers\CuotaController::class)->only(['index', 'show']);
     Route::post('cuotas/{cuota}/kuti-checkout', [App\Http\Controllers\KutiPaymentController::class, 'checkout']);
     Route::post('cuotas/{cuota}/kuti-confirm', [App\Http\Controllers\KutiPaymentController::class, 'confirm']);
+    Route::post('cuotas/{cuota}/pago-manual', [App\Http\Controllers\PagoCuotumController::class, 'storeManual']);
+    Route::post('contratos/{contrato}/kuti-subscription', [App\Http\Controllers\KutiSubscriptionController::class, 'store']);
     Route::get('productos/{id}/formato-alta/pdf', [App\Http\Controllers\ProductoController::class, 'pdfFormatoAlta']);
 
     Route::middleware(AdminOnly::class)->group(function () {
@@ -67,6 +69,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::apiResource('clientes', App\Http\Controllers\ClienteController::class);
         Route::get('clientes/{id}/sucursales', [App\Http\Controllers\ClienteController::class, 'sucursalesPorCliente']);
         Route::apiResource('pagos', App\Http\Controllers\PagoCuotumController::class);
+        Route::post('pagos/{pago}/aprobar', [App\Http\Controllers\PagoCuotumController::class, 'approve']);
+        Route::post('pagos/{pago}/rechazar', [App\Http\Controllers\PagoCuotumController::class, 'reject']);
+        Route::get('pagos/{pago}/comprobante', [App\Http\Controllers\PagoCuotumController::class, 'mostrarComprobante']);
+        Route::get('configuracion/notificaciones-pagos', [App\Http\Controllers\ConfiguracionController::class, 'paymentNotifications']);
+        Route::put('configuracion/notificaciones-pagos', [App\Http\Controllers\ConfiguracionController::class, 'updatePaymentNotifications']);
         Route::get('contactos/buscar-dni/{dni}', [App\Http\Controllers\ContactoController::class, 'buscarPorDni']);
         Route::apiResource('contactos', App\Http\Controllers\ContactoController::class)->only(['index', 'show', 'update', 'destroy']);
         Route::post('contratos/{id}/firmas', [App\Http\Controllers\ContratoController::class, 'guardarFirmas']);
