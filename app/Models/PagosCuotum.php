@@ -35,6 +35,7 @@ class PagosCuotum extends Model
 		'cuota_id' => 'int',
 		'fecha_pago' => 'datetime',
 		'monto_pagado' => 'float'
+		,'revisado_at' => 'datetime'
 	];
 
 	protected $fillable = [
@@ -42,6 +43,11 @@ class PagosCuotum extends Model
 		'fecha_pago',
 		'monto_pagado',
 		'comprobante'
+		,'metodo_pago'
+		,'estado_revision'
+		,'motivo_rechazo'
+		,'revisado_por'
+		,'revisado_at'
 	];
 
 	public function cuota()

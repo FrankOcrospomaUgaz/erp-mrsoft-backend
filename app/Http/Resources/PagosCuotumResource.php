@@ -19,6 +19,11 @@ class PagosCuotumResource extends JsonResource
             'fecha_pago' => $this->fecha_pago?->format('Y-m-d'),
             'monto_pagado' => $this->monto_pagado,
             'comprobante' => $this->comprobante,
+            'metodo_pago' => $this->metodo_pago,
+            'estado_revision' => $this->estado_revision,
+            'motivo_rechazo' => $this->motivo_rechazo,
+            'revisado_por' => $this->revisado_por,
+            'revisado_at' => $this->revisado_at,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
 

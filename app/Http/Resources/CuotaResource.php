@@ -16,8 +16,8 @@ class CuotaResource extends JsonResource
     {
         // Calcular monto pagado (usando relación cargada o consulta directa)
         $montoPagado = $this->whenLoaded('pagos_cuota')
-            ? $this->pagos_cuota->sum('monto_pagado')
-            : $this->pagos_cuota()->sum('monto_pagado');
+            ? $this->pagos_cuota->where('estado_revision', 'aprobado')->sum('monto_pagado')
+            : $this->pagos_cuota()->where('estado_revision', 'aprobado')->sum('monto_pagado');
 
         // Calcular monto pendiente
         $montoPendiente = max(0, $this->monto - $montoPagado);
