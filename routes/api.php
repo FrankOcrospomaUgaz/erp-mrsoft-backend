@@ -72,6 +72,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('pagos/{pago}/aprobar', [App\Http\Controllers\PagoCuotumController::class, 'approve']);
         Route::post('pagos/{pago}/rechazar', [App\Http\Controllers\PagoCuotumController::class, 'reject']);
         Route::get('pagos/{pago}/comprobante', [App\Http\Controllers\PagoCuotumController::class, 'mostrarComprobante']);
+        Route::get('configuracion/notificaciones-pagos', [App\Http\Controllers\ConfiguracionController::class, 'paymentNotifications']);
+        Route::put('configuracion/notificaciones-pagos', [App\Http\Controllers\ConfiguracionController::class, 'updatePaymentNotifications']);
         Route::get('contactos/buscar-dni/{dni}', [App\Http\Controllers\ContactoController::class, 'buscarPorDni']);
         Route::apiResource('contactos', App\Http\Controllers\ContactoController::class)->only(['index', 'show', 'update', 'destroy']);
         Route::post('contratos/{id}/firmas', [App\Http\Controllers\ContratoController::class, 'guardarFirmas']);

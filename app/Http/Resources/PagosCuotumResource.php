@@ -22,6 +22,7 @@ class PagosCuotumResource extends JsonResource
             'metodo_pago' => $this->metodo_pago,
             'estado_revision' => $this->estado_revision,
             'motivo_rechazo' => $this->motivo_rechazo,
+            'observacion_revision' => $this->observacion_revision,
             'revisado_por' => $this->revisado_por,
             'revisado_at' => $this->revisado_at,
             'created_at' => $this->created_at,

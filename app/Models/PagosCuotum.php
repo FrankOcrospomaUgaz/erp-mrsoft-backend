@@ -46,6 +46,7 @@ class PagosCuotum extends Model
 		,'metodo_pago'
 		,'estado_revision'
 		,'motivo_rechazo'
+		,'observacion_revision'
 		,'revisado_por'
 		,'revisado_at'
 	];
