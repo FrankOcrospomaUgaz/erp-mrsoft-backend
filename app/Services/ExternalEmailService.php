@@ -79,8 +79,8 @@ class ExternalEmailService
         $title = $approved ? 'Comprobante aprobado' : 'Comprobante rechazado';
         $color = $approved ? '#047857' : '#b91c1c';
         $message = $approved ? 'Tu pago fue validado y la cuota ya fue actualizada.' : 'Tu comprobante no pudo ser validado. Puedes revisar el comentario y enviar uno nuevo.';
-        $commentHtml = $comment ? '<div style="margin-top:18px;padding:14px;background:#f8fafc;border-radius:8px"><strong>Comentario:</strong><br>' . nl2br(e($comment)) . '</div>' : '';
-        $body = $this->layout($title, $color, '<p>' . $message . '</p><p style="color:#64748b">Contrato: <strong>' . e($pago->cuota?->contrato?->numero ?: '—') . '</strong><br>Importe: <strong>S/ ' . number_format((float) $pago->monto_pagado, 2) . '</strong></p>' . $commentHtml . '<p style="margin:24px 0 0;color:#64748b;font-size:12px">Este mensaje fue generado automáticamente.</p>');
+        $commentHtml = $comment ? '<p style="margin:20px 0 0;padding:14px;background:#f8fafc;border-left:4px solid ' . $color . ';line-height:1.6"><strong>Comentario de revisión:</strong><br>' . nl2br(e($comment)) . '</p>' : '';
+        $body = $this->layout($title, $color, '<p>' . $message . '</p><p style="color:#64748b"><strong>Contrato:</strong> ' . e($pago->cuota?->contrato?->numero ?: '—') . '<br><strong>Importe:</strong> S/ ' . number_format((float) $pago->monto_pagado, 2) . '</p>' . $commentHtml . '<p style="margin:24px 0 0;color:#64748b;font-size:12px">Este mensaje fue generado automáticamente.</p>');
         return $this->send([$recipient], $title, $body);
     }
 

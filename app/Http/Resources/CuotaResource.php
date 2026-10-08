@@ -24,8 +24,7 @@ class CuotaResource extends JsonResource
         $manualPayments = $this->relationLoaded('pagos_cuota')
             ? $this->pagos_cuota->where('metodo_pago', 'manual')->sortByDesc('id')
             : collect();
-        $pendingManual = $manualPayments->firstWhere('estado_revision', 'pendiente');
-        $rejectedManual = $manualPayments->firstWhere('estado_revision', 'rechazado');
+        $latestManual = $manualPayments->first();
 
         return [
             'id' => $this->id,
@@ -37,9 +36,9 @@ class CuotaResource extends JsonResource
             'fecha_pago' => $this->fecha_pago?->format('Y-m-d'),
             'situacion' => $this->situacion,
             'pago_manual' => [
-                'estado' => $pendingManual ? 'pendiente' : ($rejectedManual ? 'rechazado' : null),
-                'pago_id' => $pendingManual?->id ?: $rejectedManual?->id,
-                'comentario' => $pendingManual?->observacion_revision ?: $rejectedManual?->observacion_revision,
+                'estado' => $latestManual?->estado_revision,
+                'pago_id' => $latestManual?->id,
+                'comentario' => $latestManual?->observacion_revision ?: $latestManual?->motivo_rechazo,
             ],
             'created_at' => $this->created_at?->format('Y-m-d H:i:s'),
             'updated_at' => $this->updated_at?->format('Y-m-d H:i:s'),
