@@ -37,6 +37,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('cuotas/{cuota}/kuti-checkout', [App\Http\Controllers\KutiPaymentController::class, 'checkout']);
     Route::post('cuotas/{cuota}/kuti-confirm', [App\Http\Controllers\KutiPaymentController::class, 'confirm']);
     Route::post('cuotas/{cuota}/pago-manual', [App\Http\Controllers\PagoCuotumController::class, 'storeManual']);
+    Route::post('cuotas/{cuota}/pago-manual/reenviar-aviso', [App\Http\Controllers\PagoCuotumController::class, 'resendManualNotification']);
     Route::post('contratos/{contrato}/kuti-subscription', [App\Http\Controllers\KutiSubscriptionController::class, 'store']);
     Route::get('productos/{id}/formato-alta/pdf', [App\Http\Controllers\ProductoController::class, 'pdfFormatoAlta']);
 

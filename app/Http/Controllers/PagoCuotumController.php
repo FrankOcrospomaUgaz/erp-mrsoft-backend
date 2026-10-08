@@ -110,12 +110,14 @@ class PagoCuotumController extends Controller
         ]);
 
         $notificationEmail = Configuracion::where('clave', 'manual_payment_notification_email')->value('valor') ?: env('PAYMENT_REVIEW_EMAIL');
-        if ($notificationEmail) {
-            try {
-                $this->emailService->notifyManualPaymentSubmitted($pago, rtrim(env('CLIENT_APP_URL', config('app.url')), '/') . '/pagos-por-aprobar?pago=' . $pago->id, $notificationEmail);
-            } catch (\Throwable $exception) {
-                Log::error('No se pudo enviar aviso de nuevo comprobante.', ['pago_id' => $pago->id, 'error' => $exception->getMessage()]);
-            }
+        if (!$notificationEmail) {
+            return response()->json(['message' => 'El comprobante fue guardado, pero no hay un correo de revisión configurado. Configúralo para enviar el aviso.'], 503);
+        }
+        try {
+            $this->emailService->notifyManualPaymentSubmitted($pago, $this->reviewUrl($pago), $notificationEmail);
+        } catch (\Throwable $exception) {
+            Log::error('No se pudo enviar aviso de nuevo comprobante.', ['pago_id' => $pago->id, 'error' => $exception->getMessage()]);
+            return response()->json(['message' => 'El comprobante fue guardado, pero no se pudo enviar el correo de aviso. Puedes usar “Reenviar comprobante”.', 'error' => $exception->getMessage()], 502);
         }
 
         return response()->json(['message' => 'Comprobante enviado. Quedará pendiente de validación.', 'data' => new PagosCuotumResource($pago)], 201);
@@ -156,6 +158,41 @@ class PagoCuotumController extends Controller
         $pago->update(['estado_revision' => 'rechazado', 'motivo_rechazo' => $validated['observacion_revision'] ?? null, 'observacion_revision' => $validated['observacion_revision'] ?? null, 'revisado_por' => $request->user()->id, 'revisado_at' => now()]);
         $this->notifyClientDecision($pago, false, $validated['observacion_revision'] ?? null);
         return response()->json(['message' => 'Comprobante rechazado.']);
+    }
+
+    public function resendManualNotification(Request $request, Cuota $cuota)
+    {
+        $clienteIds = $this->accessibleClienteIds($request);
+        $cuota->load(['contrato.cliente', 'pagos_cuota']);
+        if (!$clienteIds || !in_array((int) $cuota->contrato?->cliente_id, $clienteIds, true)) {
+            return response()->json(['message' => 'No autorizado'], 403);
+        }
+
+        $pago = $cuota->pagos_cuota
+            ->where('metodo_pago', 'manual')
+            ->where('estado_revision', 'pendiente')
+            ->sortByDesc('id')
+            ->first();
+        if (!$pago) {
+            return response()->json(['message' => 'No existe un comprobante pendiente para reenviar.'], 422);
+        }
+
+        $notificationEmail = Configuracion::where('clave', 'manual_payment_notification_email')->value('valor') ?: env('PAYMENT_REVIEW_EMAIL');
+        if (!$notificationEmail) {
+            return response()->json(['message' => 'No hay un correo de revisión configurado.'], 503);
+        }
+        try {
+            $this->emailService->notifyManualPaymentSubmitted($pago, $this->reviewUrl($pago), $notificationEmail);
+            return response()->json(['message' => 'El aviso fue reenviado correctamente.']);
+        } catch (\Throwable $exception) {
+            Log::error('No se pudo reenviar aviso de comprobante.', ['pago_id' => $pago->id, 'error' => $exception->getMessage()]);
+            return response()->json(['message' => 'No se pudo reenviar el correo de aviso.', 'error' => $exception->getMessage()], 502);
+        }
+    }
+
+    private function reviewUrl(PagosCuotum $pago): string
+    {
+        return rtrim(env('CLIENT_APP_URL', config('app.url')), '/') . '/pagos-por-aprobar?pago=' . $pago->id;
     }
 
     private function notifyClientDecision(PagosCuotum $pago, bool $approved, ?string $comment): void
