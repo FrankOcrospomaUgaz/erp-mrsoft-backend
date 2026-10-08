@@ -60,7 +60,11 @@ class ExternalEmailService
     {
         if (!$date) return 'No registrado';
         $format = $withTime ? 'd/m/Y H:i' : 'd/m/Y';
-        return Carbon::parse($date)->format($format);
+        $carbon = Carbon::parse($date);
+        if ($withTime) {
+            $carbon = $carbon->setTimezone(config('app.timezone', 'America/Lima'));
+        }
+        return $carbon->format($format);
     }
 
     private function formatPeriod($date): string
