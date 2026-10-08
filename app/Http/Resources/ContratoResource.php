@@ -35,6 +35,7 @@ class ContratoResource extends JsonResource
             'fecha_anulacion' => $this->fecha_anulacion,
             'has_firma_arrendador' => !empty($this->firma_arrendador),
             'has_firma_cliente' => !empty($this->firma_cliente),
+            'acta_variables' => $this->acta_variables,
             'firma_arrendador' => $this->when(!$request->routeIs('contratos.index') || $request->boolean('with_firmas'), $this->firma_arrendador),
             'firma_cliente' => $this->when(!$request->routeIs('contratos.index') || $request->boolean('with_firmas'), $this->firma_cliente),
             'created_at'   => $this->created_at ? $this->created_at->toIso8601String() : null,

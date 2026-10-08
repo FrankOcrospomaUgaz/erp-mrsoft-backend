@@ -33,6 +33,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('contratos/{id}/word', [App\Http\Controllers\ContratoController::class, 'word']);
     Route::apiResource('contratos', App\Http\Controllers\ContratoController::class)->only(['index', 'show']);
     Route::post('contratos/{id}/firmar-cliente', [App\Http\Controllers\ContratoController::class, 'firmarCliente']);
+    Route::put('contratos/{id}/acta-variables', [App\Http\Controllers\ContratoController::class, 'saveActaVariables']);
     Route::apiResource('cuotas', App\Http\Controllers\CuotaController::class)->only(['index', 'show']);
     Route::post('cuotas/{cuota}/kuti-checkout', [App\Http\Controllers\KutiPaymentController::class, 'checkout']);
     Route::post('cuotas/{cuota}/kuti-confirm', [App\Http\Controllers\KutiPaymentController::class, 'confirm']);

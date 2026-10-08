@@ -33,6 +33,7 @@ class Contrato extends Model
         'kuti_subscription_amount',
         'kuti_subscription_next_charge_at',
         'kuti_subscription_charge_time',
+        'acta_variables',
     ];
 
     protected $casts = [
@@ -51,6 +52,7 @@ class Contrato extends Model
         'fecha_anulacion' => 'date',
         'kuti_subscription_amount' => 'decimal:2',
         'kuti_subscription_next_charge_at' => 'datetime',
+        'acta_variables' => 'array',
     ];
 
     public static array $rules = [

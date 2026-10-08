@@ -959,6 +959,36 @@ class ContratoController extends Controller
         }
     }
 
+    public function saveActaVariables(Request $request, $id)
+    {
+        if ($request->user()?->cliente_id) {
+            return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
+        }
+
+        $contrato = Contrato::find($id);
+
+        if (!$contrato) {
+            return response()->json([
+                'status' => 404,
+                'message' => 'Contrato no encontrado',
+            ], 404);
+        }
+
+        $validated = $request->validate([
+            'acta_variables' => ['required', 'array'],
+        ]);
+
+        $contrato->update([
+            'acta_variables' => $validated['acta_variables'],
+        ]);
+
+        return response()->json([
+            'status' => 200,
+            'message' => 'Variables del Acta de Alta guardadas correctamente.',
+            'data' => new ContratoResource($contrato->fresh()),
+        ], 200);
+    }
+
     public function destroy(Request $request, $id)
     {
         if ($request->user()?->cliente_id) {
