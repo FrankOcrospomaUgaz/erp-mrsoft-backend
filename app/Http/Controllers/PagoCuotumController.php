@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Resources\PagosCuotumResource;
 use App\Models\Cuota;
+use App\Models\Cliente;
 use App\Models\Configuracion;
 use App\Services\ExternalEmailService;
 use Illuminate\Support\Facades\Log;
@@ -211,7 +212,17 @@ class PagoCuotumController extends Controller
     private function accessibleClienteIds(Request $request): array
     {
         $clienteId = $request->user()?->cliente_id;
-        return $clienteId ? [$clienteId] : [];
+        if (!$clienteId) return [];
+
+        $ids = [(int) $clienteId];
+        $pending = [(int) $clienteId];
+        while ($pending) {
+            $children = Cliente::whereIn('parent_cliente_id', $pending)->pluck('id')->map(fn ($id) => (int) $id)->all();
+            $children = array_values(array_diff($children, $ids));
+            $ids = array_values(array_unique(array_merge($ids, $children)));
+            $pending = $children;
+        }
+        return $ids;
     }
 
 public function store(Request $request)
