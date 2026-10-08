@@ -25,11 +25,14 @@ class ExternalEmailService
             ->timeout((int) config('services.email_api.timeout', 20))
             ->post(config('services.email_api.endpoint'), $payload);
 
-        if ($response->failed() || $response->json('success') === false) {
+        $data = $response->json() ?: [];
+        $providerFailed = array_key_exists('success', $data) && $data['success'] === false;
+        $providerCode = array_key_exists('code', $data) ? (string) $data['code'] : null;
+        if ($response->failed() || $providerFailed || ($providerCode !== null && $providerCode !== '0')) {
             throw new \RuntimeException('La API de correo rechazó el mensaje: ' . $response->body());
         }
 
-        return $response->json() ?: ['success' => true];
+        return $data ?: ['success' => true];
     }
 
     public function notifyManualPaymentSubmitted(PagosCuotum $pago, string $reviewUrl, string $recipient): array
