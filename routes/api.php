@@ -40,6 +40,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('cuotas/{cuota}/pago-manual/reenviar-aviso', [App\Http\Controllers\PagoCuotumController::class, 'resendManualNotification']);
     Route::post('contratos/{contrato}/kuti-subscription', [App\Http\Controllers\KutiSubscriptionController::class, 'store']);
     Route::get('productos/{id}/formato-alta/pdf', [App\Http\Controllers\ProductoController::class, 'pdfFormatoAlta']);
+    Route::post('productos/{id}/formato-alta/acta-pdf', [App\Http\Controllers\ProductoController::class, 'pdfActaFormatoAlta']);
 
     Route::middleware(AdminOnly::class)->group(function () {
         Route::get('reportes/opciones', [App\Http\Controllers\ReportController::class, 'options']);

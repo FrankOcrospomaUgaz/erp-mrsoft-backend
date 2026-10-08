@@ -340,6 +340,38 @@ class ProductoController extends Controller
         ]);
     }
 
+    public function pdfActaFormatoAlta(Request $request, $id)
+    {
+        $producto = Producto::find($id);
+
+        if (!$producto) {
+            return response()->json([
+                'status' => 404,
+                'message' => 'Producto no encontrado',
+            ], 404);
+        }
+
+        $validated = $request->validate([
+            'html' => ['required', 'string', 'max:10000000'],
+            'paper_size' => ['nullable', 'in:a4,letter'],
+        ]);
+
+        $paperSize = strtolower($validated['paper_size'] ?? 'letter');
+        $pdf = Pdf::loadHTML($validated['html'])
+            ->setPaper($paperSize, 'portrait')
+            ->setOption('isRemoteEnabled', true)
+            ->setOption('isHtml5ParserEnabled', true)
+            ->setOption('dpi', 96)
+            ->setOption('defaultFont', 'Helvetica');
+
+        $safeName = preg_replace('/[^A-Za-z0-9_-]/', '', strtolower($producto->nombre));
+
+        return response($pdf->output(), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="acta-alta-' . $safeName . '.pdf"',
+        ]);
+    }
+
     private function getDefaultFormatoAlta(Producto $producto): array
     {
         $nombre = $producto->nombre;
