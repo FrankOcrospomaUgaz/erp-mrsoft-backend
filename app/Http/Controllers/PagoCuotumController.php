@@ -10,13 +10,12 @@ use Illuminate\Support\Facades\Storage;
 use App\Http\Resources\PagosCuotumResource;
 use App\Models\Cuota;
 use App\Models\Configuracion;
-use App\Mail\ManualPaymentSubmittedMail;
-use App\Mail\ManualPaymentDecisionMail;
-use Illuminate\Support\Facades\Mail;
+use App\Services\ExternalEmailService;
 use Illuminate\Support\Facades\Log;
 
 class PagoCuotumController extends Controller
 {
+    public function __construct(private ExternalEmailService $emailService) {}
 
     public function index(Request $request)
     {
@@ -113,7 +112,7 @@ class PagoCuotumController extends Controller
         $notificationEmail = Configuracion::where('clave', 'manual_payment_notification_email')->value('valor') ?: env('PAYMENT_REVIEW_EMAIL');
         if ($notificationEmail) {
             try {
-                Mail::to($notificationEmail)->send(new ManualPaymentSubmittedMail($pago, rtrim(env('CLIENT_APP_URL', config('app.url')), '/') . '/pagos-por-aprobar?pago=' . $pago->id));
+                $this->emailService->notifyManualPaymentSubmitted($pago, rtrim(env('CLIENT_APP_URL', config('app.url')), '/') . '/pagos-por-aprobar?pago=' . $pago->id, $notificationEmail);
             } catch (\Throwable $exception) {
                 Log::error('No se pudo enviar aviso de nuevo comprobante.', ['pago_id' => $pago->id, 'error' => $exception->getMessage()]);
             }
@@ -166,7 +165,7 @@ class PagoCuotumController extends Controller
         $email = $cliente?->dueno_email ?: $cliente?->representante_email;
         if (!$email) return;
         try {
-            Mail::to($email)->send(new ManualPaymentDecisionMail($pago, $approved, $comment));
+            $this->emailService->notifyManualPaymentDecision($pago, $approved, $comment, $email);
         } catch (\Throwable $exception) {
             Log::error('No se pudo enviar decisión de comprobante al cliente.', ['pago_id' => $pago->id, 'error' => $exception->getMessage()]);
         }
