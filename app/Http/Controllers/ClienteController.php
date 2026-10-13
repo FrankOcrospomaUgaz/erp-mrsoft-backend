@@ -6,6 +6,7 @@ use App\Http\Resources\ClienteResource;
 use App\Models\Cliente;
 use App\Models\TiposUsuario;
 use App\Models\Usuario;
+use App\Models\Configuracion;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
@@ -13,9 +14,13 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use App\Services\ExternalEmailService;
 
 class ClienteController extends Controller
 {
+    public function __construct(private ExternalEmailService $emailService) {}
     public function index(Request $request)
     {
         $search = $request->get('search');
@@ -415,8 +420,12 @@ class ClienteController extends Controller
             'password' => [
                 $usuarioActual ? 'nullable' : 'required',
                 'string',
-                'min:4',
+                'min:10',
                 'max:255',
+                'regex:/[A-Z]/',
+                'regex:/[a-z]/',
+                'regex:/\d/',
+                'regex:/[^A-Za-z0-9]/',
             ],
             'nombres' => ['nullable', 'string', 'max:255'],
             'apellidos' => ['nullable', 'string', 'max:255'],
@@ -424,7 +433,8 @@ class ClienteController extends Controller
             'usuario.required' => 'El usuario es obligatorio.',
             'usuario.unique' => 'Ya existe otro usuario con ese login.',
             'password.required' => 'La contraseña es obligatoria para crear el acceso.',
-            'password.min' => 'La contraseña debe tener al menos 4 caracteres.',
+            'password.min' => 'La contraseña debe tener al menos 10 caracteres.',
+            'password.regex' => 'La contraseña debe incluir mayúscula, minúscula, número y símbolo.',
         ]);
 
         if ($validator->fails()) {
@@ -451,6 +461,7 @@ class ClienteController extends Controller
 
         if ($request->filled('password')) {
             $attributes['password'] = Hash::make($request->input('password'));
+            $attributes['password_changed_at'] = null;
         }
 
         if ($usuarioActual) {
@@ -462,6 +473,20 @@ class ClienteController extends Controller
             $usuario = $usuarioActual->fresh();
         } else {
             $usuario = Usuario::create($attributes);
+        }
+
+        if ($request->filled('password')) {
+            try {
+                $this->emailService->notifyPortalCredentials(
+                    $this->portalEmail($cliente->load('contactos_clientes')),
+                    $usuario->nombres,
+                    $usuario->usuario,
+                    $request->input('password'),
+                    true
+                );
+            } catch (\Throwable $e) {
+                Log::warning('No se pudo enviar la clave actualizada del portal', ['cliente_id' => $cliente->id, 'error' => $e->getMessage()]);
+            }
         }
 
         return response()->json([
@@ -484,6 +509,32 @@ class ClienteController extends Controller
                     : 'El usuario fue actualizado sin cambiar la contraseña.',
             ],
         ]);
+    }
+
+    public function resetPortalUserPassword(Request $request, $id)
+    {
+        $cliente = Cliente::with('contactos_clientes')->findOrFail($id);
+        $usuario = Usuario::withTrashed()->where('cliente_id', $cliente->id)->latest()->first();
+
+        if (!$usuario) {
+            $this->ensureClientePortalUser($cliente);
+            $usuario = Usuario::where('cliente_id', $cliente->id)->latest()->first();
+        }
+
+        $password = $this->generatePortalPassword();
+        $usuario->update(['password' => Hash::make($password), 'password_changed_at' => null]);
+        $recipient = $this->portalEmail($cliente);
+
+        try {
+            $this->emailService->notifyPortalCredentials($recipient, $usuario->nombres, $usuario->usuario, $password, true);
+        } catch (\Throwable $e) {
+            Log::warning('No se pudo enviar la clave del portal', ['cliente_id' => $cliente->id, 'error' => $e->getMessage()]);
+        }
+
+        return response()->json(['status' => 200, 'message' => "Clave reiniciada y enviada a {$recipient}.", 'data' => [
+            'password_visible' => $password,
+            'recipient' => $recipient,
+        ]]);
     }
 
     private function friendlyUniqueError(string $dbMessage): string
@@ -925,14 +976,38 @@ class ClienteController extends Controller
             return;
         }
 
-        Usuario::create([
+        $password = $this->generatePortalPassword();
+        $usuario = Usuario::create([
             'cliente_id' => $cliente->id,
             'nombres' => $nombre,
             'apellidos' => '',
             'usuario' => $cliente->ruc,
-            'password' => Hash::make($cliente->ruc),
+            'password' => Hash::make($password),
             'tipo_usuario_id' => $tipoCliente->id,
         ]);
+
+        $recipient = $this->portalEmail($cliente);
+        try {
+            $this->emailService->notifyPortalCredentials($recipient, $nombre, $cliente->ruc, $password, false);
+        } catch (\Throwable $e) {
+            Log::warning('No se pudo enviar las credenciales del portal', ['cliente_id' => $cliente->id, 'error' => $e->getMessage()]);
+        }
+    }
+
+    private function generatePortalPassword(): string
+    {
+        $password = Str::random(7) . '@' . now()->format('Y');
+        return str_shuffle($password);
+    }
+
+    private function portalEmail(Cliente $cliente): string
+    {
+        $email = $cliente->dueno_email ?: $cliente->representante_email ?: $cliente->responsable_email;
+        if (!$email) {
+            $email = $cliente->contactos_clientes->first(fn ($contacto) => !empty($contacto->email))?->email;
+        }
+        $paymentNotificationEmail = Configuracion::where('clave', 'manual_payment_notification_email')->value('valor');
+        return $email ?: ($paymentNotificationEmail ?: (env('PAYMENT_REVIEW_EMAIL') ?: 'admin@garzasoft.com'));
     }
 
     private function emptyToNull($value): ?string

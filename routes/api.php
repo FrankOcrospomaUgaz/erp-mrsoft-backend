@@ -22,6 +22,7 @@ Route::middleware('auth:sanctum')->get('/authenticate', [AuthController::class, 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/logout', [AuthController::class, 'logout']);
+    Route::post('/auth/change-password', [AuthController::class, 'changePassword']);
     Route::get('comprobantes/{id}/pdf', [App\Http\Controllers\ComprobanteController::class, 'pdf']);
     Route::get('comprobantes/{id}/download-xml', [App\Http\Controllers\ComprobanteController::class, 'downloadXml']);
     Route::get('comprobantes/{id}/download-cdr', [App\Http\Controllers\ComprobanteController::class, 'downloadCdr']);
@@ -69,6 +70,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('clientes/consulta-dni/{dni}', [App\Http\Controllers\ClienteController::class, 'consultarDni']);
         Route::get('clientes/{id}/portal-user', [App\Http\Controllers\ClienteController::class, 'portalUser']);
         Route::match(['post', 'put'], 'clientes/{id}/portal-user', [App\Http\Controllers\ClienteController::class, 'savePortalUser']);
+        Route::post('clientes/{id}/portal-user/reset-password', [App\Http\Controllers\ClienteController::class, 'resetPortalUserPassword']);
         Route::apiResource('clientes', App\Http\Controllers\ClienteController::class);
         Route::get('clientes/{id}/sucursales', [App\Http\Controllers\ClienteController::class, 'sucursalesPorCliente']);
         Route::apiResource('pagos', App\Http\Controllers\PagoCuotumController::class);

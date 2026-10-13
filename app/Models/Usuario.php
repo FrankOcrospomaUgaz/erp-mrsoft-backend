@@ -35,7 +35,8 @@ class Usuario extends Model
 
 	protected $casts = [
 		'cliente_id' => 'int',
-		'tipo_usuario_id' => 'int'
+		'tipo_usuario_id' => 'int',
+		'password_changed_at' => 'datetime',
 	];
 
 	protected $hidden = [
@@ -48,6 +49,7 @@ class Usuario extends Model
 		'apellidos',
 		'usuario',
 		'password',
+		'password_changed_at',
 		'tipo_usuario_id'
 	];
 
