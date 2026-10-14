@@ -41,20 +41,51 @@ class KutiPaymentController extends Controller
             ->acceptJson()->timeout((int) config('services.kuti.timeout', 20))
             ->get(config('services.kuti.base_url') . '/payment-intents/' . $request->payment_intent_id);
         $intent = $response->json('data', []);
-        if ($response->failed() || ($intent['status'] ?? null) !== 'SUCCEEDED') {
+        if (!is_array($intent) || !$intent) {
+            $intent = $response->json() ?: [];
+        }
+        $intentStatus = strtoupper((string) ($intent['status'] ?? $intent['payment_status'] ?? ''));
+        if ($response->failed() || $intentStatus !== 'SUCCEEDED') {
             return response()->json(['message' => 'Kuti aún no confirma el pago.'], 409);
         }
 
-        DB::transaction(function () use ($cuota, $intent) {
-            if (PagosCuotum::where('comprobante', 'KUTI:' . $intent['id'])->exists()) return;
-            $paid = (float) $cuota->pagos_cuota->sum('monto_pagado');
-            $amount = min((float) ($intent['amount']['amount'] ?? 0), round((float) $cuota->monto - $paid, 2));
-            if ($amount <= 0) return;
-            PagosCuotum::create(['cuota_id' => $cuota->id, 'fecha_pago' => now(), 'monto_pagado' => $amount, 'comprobante' => 'KUTI:' . $intent['id']]);
-            $total = round($paid + $amount, 2);
-            $cuota->update(['situacion' => $total >= round((float) $cuota->monto, 2) ? 'pagado' : 'pendiente', 'fecha_pago' => $total >= round((float) $cuota->monto, 2) ? now() : null, 'kuti_payment_status' => 'SUCCEEDED']);
+        $updatedCuota = DB::transaction(function () use ($cuota, $intent, $request) {
+            $lockedCuota = Cuota::lockForUpdate()->findOrFail($cuota->id);
+            $intentId = (string) ($intent['id'] ?? $request->payment_intent_id);
+            $comprobante = 'KUTI:' . $intentId;
+
+            if (!PagosCuotum::where('comprobante', $comprobante)->exists()) {
+                $alreadyPaid = (float) $lockedCuota->pagos_cuota()->sum('monto_pagado');
+                $amountValue = is_array($intent['amount'] ?? null)
+                    ? ($intent['amount']['amount'] ?? 0)
+                    : ($intent['amount'] ?? 0);
+                $amount = min((float) $amountValue, round((float) $lockedCuota->monto - $alreadyPaid, 2));
+
+                if ($amount > 0) {
+                    PagosCuotum::create([
+                        'cuota_id' => $lockedCuota->id,
+                        'fecha_pago' => now(),
+                        'monto_pagado' => $amount,
+                        'comprobante' => $comprobante,
+                    ]);
+                }
+            }
+
+            $totalPaid = round((float) $lockedCuota->pagos_cuota()->sum('monto_pagado'), 2);
+            $isPaid = $totalPaid >= round((float) $lockedCuota->monto, 2);
+            $lockedCuota->update([
+                'situacion' => $isPaid ? 'pagado' : 'pendiente',
+                'fecha_pago' => $isPaid ? ($lockedCuota->fecha_pago ?: now()) : null,
+                'kuti_payment_status' => 'SUCCEEDED',
+            ]);
+
+            return $lockedCuota->fresh();
         });
-        return response()->json(['message' => 'Pago confirmado']);
+        return response()->json(['message' => 'Pago confirmado', 'data' => [
+            'cuota_id' => $updatedCuota->id,
+            'situacion' => $updatedCuota->situacion,
+            'fecha_pago' => $updatedCuota->fecha_pago?->toISOString(),
+        ]]);
     }
 
     private function canAccess(int $clienteId, Cuota $cuota): bool
