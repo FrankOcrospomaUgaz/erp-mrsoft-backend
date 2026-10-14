@@ -71,15 +71,18 @@ class KutiPaymentService
         }
 
         $data = $response->json('data', []);
+        $paymentIntentId = data_get($data, 'payment_intent_id')
+            ?: data_get($data, 'payment_intent.id')
+            ?: data_get($data, 'latest_cycle.payment_intent_id');
         $cuota->update([
-            'kuti_payment_intent_id' => $data['payment_intent_id'] ?? null,
+            'kuti_payment_intent_id' => $paymentIntentId,
             'kuti_checkout_url' => $data['checkout_url'] ?? null,
             'kuti_payment_status' => $data['status'] ?? 'PENDING',
         ]);
 
         return [
             'checkout_url' => $data['checkout_url'] ?? null,
-            'payment_intent_id' => $data['payment_intent_id'] ?? null,
+            'payment_intent_id' => $paymentIntentId,
             'amount' => number_format($pending, 2, '.', ''),
         ];
     }

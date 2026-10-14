@@ -33,10 +33,6 @@ class KutiPaymentController extends Controller
         if ($request->user()?->cliente_id && !$this->canAccess($request->user()->cliente_id, $cuota)) {
             return response()->json(['message' => 'No autorizado'], 403);
         }
-        if ($cuota->kuti_payment_intent_id !== $request->payment_intent_id) {
-            return response()->json(['message' => 'Cobro no asociado a esta cuota'], 422);
-        }
-
         $response = Http::withToken(config('services.kuti.secret_key'))
             ->acceptJson()->timeout((int) config('services.kuti.timeout', 20))
             ->get(config('services.kuti.base_url') . '/payment-intents/' . $request->payment_intent_id);
@@ -44,14 +40,18 @@ class KutiPaymentController extends Controller
         if (!is_array($intent) || !$intent) {
             $intent = $response->json() ?: [];
         }
+        if (isset($intent['payment_intent']) && is_array($intent['payment_intent'])) {
+            $intent = $intent['payment_intent'];
+        }
         $intentStatus = strtoupper((string) ($intent['status'] ?? $intent['payment_status'] ?? ''));
         if ($response->failed() || $intentStatus !== 'SUCCEEDED') {
             return response()->json(['message' => 'Kuti aún no confirma el pago.'], 409);
         }
 
-        $updatedCuota = DB::transaction(function () use ($cuota, $intent, $request) {
+        $providerIntentId = (string) ($intent['id'] ?? $request->payment_intent_id);
+        $updatedCuota = DB::transaction(function () use ($cuota, $intent, $request, $providerIntentId) {
             $lockedCuota = Cuota::lockForUpdate()->findOrFail($cuota->id);
-            $intentId = (string) ($intent['id'] ?? $request->payment_intent_id);
+            $intentId = $providerIntentId;
             $comprobante = 'KUTI:' . $intentId;
 
             if (!PagosCuotum::where('comprobante', $comprobante)->exists()) {
@@ -77,6 +77,7 @@ class KutiPaymentController extends Controller
                 'situacion' => $isPaid ? 'pagado' : 'pendiente',
                 'fecha_pago' => $isPaid ? ($lockedCuota->fecha_pago ?: now()) : null,
                 'kuti_payment_status' => 'SUCCEEDED',
+                'kuti_payment_intent_id' => $intentId,
             ]);
 
             return $lockedCuota->fresh();
