@@ -10,8 +10,15 @@ class ExternalEmailService
 {
     public function send(array $to, string $subject, string $body, array $cc = [], array $bcc = [], array $attachments = []): array
     {
+        $endpoint = config('services.email_api.endpoint');
+        $token = config('services.email_api.token');
+
+        if (!$endpoint || !$token) {
+            throw new \RuntimeException('El servicio de correo no está configurado. Falta COMPROBANTES_MAIL_TOKEN.');
+        }
+
         $payload = [
-            'token' => config('services.email_api.token'),
+            'token' => $token,
             'to' => array_values($to),
             'bcc' => array_values($bcc),
             'cc' => array_values($cc),
@@ -23,12 +30,11 @@ class ExternalEmailService
         $response = Http::asJson()
             ->acceptJson()
             ->timeout((int) config('services.email_api.timeout', 20))
-            ->post(config('services.email_api.endpoint'), $payload);
+            ->post($endpoint, $payload);
 
         $data = $response->json() ?: [];
-        $providerFailed = array_key_exists('success', $data) && $data['success'] === false;
-        $providerCode = array_key_exists('code', $data) ? (string) $data['code'] : null;
-        if ($response->failed() || $providerFailed || ($providerCode !== null && $providerCode !== '0')) {
+        $providerCode = array_key_exists('code', $data) ? (int) $data['code'] : null;
+        if ($response->status() !== 200 || $providerCode !== 0) {
             throw new \RuntimeException('La API de correo rechazó el mensaje: ' . $response->body());
         }
 

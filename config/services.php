@@ -57,8 +57,8 @@ return [
     ],
 
     'email_api' => [
-        'endpoint' => env('EMAIL_API_ENDPOINT', 'https://facturae-garzasoft.com/facturacion/enviaEmail/envia_correo_json.php'),
-        'token' => env('EMAIL_API_TOKEN'),
+        'endpoint' => env('COMPROBANTES_MAIL_ENDPOINT', env('EMAIL_API_ENDPOINT', 'https://facturae-garzasoft.com/facturacion/enviaEmail/envia_correo_json.php')),
+        'token' => env('COMPROBANTES_MAIL_TOKEN', env('EMAIL_API_TOKEN')),
         'timeout' => env('EMAIL_API_TIMEOUT', 20),
         'frontend_url' => rtrim(env('CLIENT_APP_URL', env('APP_URL', 'http://localhost')), '/'),
     ],
