@@ -900,7 +900,7 @@ class ClienteController extends Controller
             return [];
         }
 
-        return array_values(array_filter(array_map(function ($contacto) {
+        $normalized = array_values(array_filter(array_map(function ($contacto) {
             if (!is_array($contacto)) {
                 return null;
             }
@@ -909,6 +909,19 @@ class ClienteController extends Controller
 
             return !empty($normalized['nombre']) ? $normalized : null;
         }, $contactos)));
+
+        $unique = [];
+        foreach ($normalized as $contacto) {
+            $identity = $this->contactoIdentityKey($contacto);
+            if (!isset($unique[$identity])) {
+                $unique[$identity] = $contacto;
+                continue;
+            }
+
+            $unique[$identity] = $this->mergeContactoData($unique[$identity], $contacto);
+        }
+
+        return array_values($unique);
     }
 
     private function normalizeTiposLocalPayload($tipos): array
@@ -934,6 +947,21 @@ class ClienteController extends Controller
             return;
         }
 
+        $contacto = $this->normalizeContactoPayload($contacto);
+        $existing = $this->findExistingContacto($contacto);
+
+        if ($existing) {
+            $existing->update($this->mergeContactoData($existing->only([
+                'dni',
+                'nombre',
+                'celular',
+                'email',
+                'es_dueno',
+                'es_vendedor',
+            ]), $contacto));
+            return;
+        }
+
         $cliente->contactos_clientes()->create([
             'dni' => $contacto['dni'] ?? null,
             'nombre' => $contacto['nombre'],
@@ -942,6 +970,70 @@ class ClienteController extends Controller
             'es_dueno' => (bool) ($contacto['es_dueno'] ?? false),
             'es_vendedor' => (bool) ($contacto['es_vendedor'] ?? false),
         ]);
+    }
+
+    private function findExistingContacto(array $contacto): ?\App\Models\ContactosCliente
+    {
+        $query = \App\Models\ContactosCliente::query()->whereNull('deleted_at');
+        $dni = $this->normalizeContactoValue($contacto['dni'] ?? null);
+
+        if ($dni !== null) {
+            return $query->where('dni', $dni)->oldest('id')->first();
+        }
+
+        $nombre = $this->normalizeContactoValue($contacto['nombre'] ?? null);
+        $email = $this->normalizeContactoValue($contacto['email'] ?? null);
+        $celular = $this->normalizeContactoValue($contacto['celular'] ?? null);
+
+        if ($nombre === null || ($email === null && $celular === null)) {
+            return null;
+        }
+
+        return $query
+            ->whereRaw('LOWER(TRIM(nombre)) = ?', [$nombre])
+            ->where(function ($inner) use ($email, $celular) {
+                if ($email !== null) {
+                    $inner->orWhereRaw('LOWER(TRIM(email)) = ?', [$email]);
+                }
+                if ($celular !== null) {
+                    $inner->orWhereRaw('TRIM(celular) = ?', [$celular]);
+                }
+            })
+            ->oldest('id')
+            ->first();
+    }
+
+    private function contactoIdentityKey(array $contacto): string
+    {
+        $dni = $this->normalizeContactoValue($contacto['dni'] ?? null);
+        if ($dni !== null) {
+            return "dni:{$dni}";
+        }
+
+        return sprintf(
+            'datos:%s|%s|%s',
+            $this->normalizeContactoValue($contacto['nombre'] ?? null) ?? '',
+            $this->normalizeContactoValue($contacto['email'] ?? null) ?? '',
+            $this->normalizeContactoValue($contacto['celular'] ?? null) ?? ''
+        );
+    }
+
+    private function normalizeContactoValue($value): ?string
+    {
+        $value = trim((string) ($value ?? ''));
+        return $value === '' ? null : mb_strtolower($value);
+    }
+
+    private function mergeContactoData(array $current, array $incoming): array
+    {
+        return [
+            'dni' => $current['dni'] ?? $incoming['dni'] ?? null,
+            'nombre' => $current['nombre'] ?: ($incoming['nombre'] ?? null),
+            'celular' => $current['celular'] ?: ($incoming['celular'] ?? null),
+            'email' => $current['email'] ?: ($incoming['email'] ?? null),
+            'es_dueno' => (bool) ($current['es_dueno'] ?? false) || (bool) ($incoming['es_dueno'] ?? false),
+            'es_vendedor' => (bool) ($current['es_vendedor'] ?? false) || (bool) ($incoming['es_vendedor'] ?? false),
+        ];
     }
 
     private function ensureClientePortalUser(?Cliente $cliente): void
