@@ -522,14 +522,24 @@ class ClienteController extends Controller
         }
 
         $password = $this->generatePortalPassword();
-        $usuario->update(['password' => Hash::make($password), 'password_changed_at' => null]);
         $recipient = $this->portalEmail($cliente);
 
         try {
             $this->emailService->notifyPortalCredentials($recipient, $usuario->nombres, $usuario->usuario, $password, true);
         } catch (\Throwable $e) {
-            Log::warning('No se pudo enviar la clave del portal', ['cliente_id' => $cliente->id, 'error' => $e->getMessage()]);
+            Log::error('No se pudo enviar la clave del portal', [
+                'cliente_id' => $cliente->id,
+                'recipient' => $recipient,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'status' => 502,
+                'message' => 'La clave no fue enviada porque la API de correo rechazó el mensaje. Verifica la configuración del correo e inténtalo nuevamente.',
+            ], 502);
         }
+
+        $usuario->update(['password' => Hash::make($password), 'password_changed_at' => null]);
 
         return response()->json(['status' => 200, 'message' => "Clave reiniciada y enviada a {$recipient}.", 'data' => [
             'password_visible' => $password,
