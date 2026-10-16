@@ -41,6 +41,7 @@ class ContratoDocumentoController extends Controller
             'documentos.max' => 'Puedes subir hasta 20 documentos por vez.',
             'documentos.*.max' => 'Cada archivo puede pesar como máximo 50 MB.',
             'documentos.*.mimes' => 'El formato de uno de los archivos no está permitido.',
+            'documentos.*.uploaded' => 'Uno de los archivos no pudo cargarse. Puede superar el límite de carga del servidor.',
         ]);
 
         $documents = [];
