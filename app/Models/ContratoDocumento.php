@@ -11,6 +11,10 @@ class ContratoDocumento extends Model
 
     protected $fillable = [
         'contrato_id',
+        'categoria',
+        'pin',
+        'fecha_vencimiento',
+        'ultima_alerta_at',
         'nombre_original',
         'ruta',
         'mime_type',
@@ -19,6 +23,9 @@ class ContratoDocumento extends Model
 
     protected $casts = [
         'tamanio' => 'integer',
+        'fecha_vencimiento' => 'date',
+        'ultima_alerta_at' => 'datetime',
+        'pin' => 'encrypted',
     ];
 
     public function contrato(): BelongsTo

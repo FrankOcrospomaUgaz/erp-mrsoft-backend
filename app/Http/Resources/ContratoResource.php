@@ -47,10 +47,12 @@ class ContratoResource extends JsonResource
             'documentos' => $this->whenLoaded('documentos', fn () => $this->documentos->map(fn ($documento) => [
                 'id' => $documento->id,
                 'contrato_id' => $documento->contrato_id,
+                'categoria' => $documento->categoria,
                 'nombre_original' => $documento->nombre_original,
                 'mime_type' => $documento->mime_type,
                 'tamanio' => $documento->tamanio,
                 'created_at' => $documento->created_at?->toIso8601String(),
+                'fecha_vencimiento' => $documento->fecha_vencimiento?->format('Y-m-d'),
             ])->values()),
 
             'contrato_producto_modulos' => $this->whenLoaded('contratoProductoModulos', function () {

@@ -29,12 +29,15 @@ class ContratoDocumentoController extends Controller
         }
 
         $request->validate([
+            'categoria' => ['required', 'in:alta_servicio,facturacion_electronica,certificado_digital'],
+            'pin' => ['required_if:categoria,certificado_digital', 'nullable', 'string', 'max:255'],
+            'fecha_vencimiento' => ['required_if:categoria,certificado_digital', 'nullable', 'date'],
             'documentos' => ['required', 'array', 'min:1', 'max:20'],
             'documentos.*' => [
                 'required',
                 'file',
                 'max:51200',
-                'mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,txt,jpg,jpeg,png,webp,zip',
+                'mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,txt,jpg,jpeg,png,webp,zip,pfx,p12,pem,cer,crt',
             ],
         ], [
             'documentos.required' => 'Selecciona al menos un documento.',
@@ -48,6 +51,9 @@ class ContratoDocumentoController extends Controller
         foreach ($files as $file) {
             $path = $file->store("contratos/{$contract->id}/documentos", 'public');
             $documents[] = $contract->documentos()->create([
+                'categoria' => $request->string('categoria')->toString(),
+                'pin' => $request->input('categoria') === 'certificado_digital' ? $request->input('pin') : null,
+                'fecha_vencimiento' => $request->input('categoria') === 'certificado_digital' ? $request->input('fecha_vencimiento') : null,
                 'nombre_original' => $file->getClientOriginalName(),
                 'ruta' => $path,
                 'mime_type' => $file->getClientMimeType() ?: $file->getMimeType(),
@@ -66,6 +72,7 @@ class ContratoDocumentoController extends Controller
     {
         $document = ContratoDocumento::with('contrato')->findOrFail($documento);
         $this->ensureAccess($request, $document->contrato);
+        abort_if($request->user()?->cliente_id && $document->categoria === 'certificado_digital', 403, 'El certificado digital es de uso administrativo.');
 
         abort_unless(Storage::disk('public')->exists($document->ruta), 404, 'El documento ya no está disponible.');
 
@@ -87,13 +94,17 @@ class ContratoDocumentoController extends Controller
 
     private function format(ContratoDocumento $documento): array
     {
+        $isClient = (bool) request()->user()?->cliente_id;
         return [
             'id' => $documento->id,
             'contrato_id' => $documento->contrato_id,
+            'categoria' => $documento->categoria,
             'nombre_original' => $documento->nombre_original,
             'mime_type' => $documento->mime_type,
             'tamanio' => $documento->tamanio,
             'created_at' => $documento->created_at?->toIso8601String(),
+            'fecha_vencimiento' => $documento->fecha_vencimiento?->format('Y-m-d'),
+            'pin' => $isClient ? null : $documento->pin,
         ];
     }
 
