@@ -13,6 +13,9 @@ class Comprobante extends Model
 
     protected $fillable = [
         'cliente_id',
+        'receptor_documento',
+        'receptor_nombre',
+        'receptor_direccion',
         'contrato_id',
         'cuota_id',
         'facturador_id',

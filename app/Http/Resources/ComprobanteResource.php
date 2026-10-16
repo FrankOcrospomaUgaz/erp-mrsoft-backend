@@ -12,6 +12,9 @@ class ComprobanteResource extends JsonResource
         return [
             'id' => $this->id,
             'cliente_id' => $this->cliente_id,
+            'receptor_documento' => $this->receptor_documento,
+            'receptor_nombre' => $this->receptor_nombre,
+            'receptor_direccion' => $this->receptor_direccion,
             'cliente' => $this->whenLoaded('cliente', fn () => new ClienteResource($this->cliente)),
             'contrato_id' => $this->contrato_id,
             'cuota_id' => $this->cuota_id,

@@ -20,7 +20,9 @@ class ComprobanteService
     public function crear(array $data, bool $emitir = false): Comprobante
     {
         return DB::transaction(function () use ($data, $emitir) {
-            $cliente = Cliente::with('contactos_clientes')->findOrFail($data['cliente_id']);
+            $cliente = !empty($data['cliente_id'])
+                ? Cliente::with('contactos_clientes')->findOrFail($data['cliente_id'])
+                : null;
             $contrato = !empty($data['contrato_id'])
                 ? Contrato::with('cliente.parent_cliente.parent_cliente')->findOrFail($data['contrato_id'])
                 : null;
@@ -29,7 +31,7 @@ class ComprobanteService
             $serie = strtoupper($data['serie'] ?? ($tipoDocumento === 'F' ? 'F001' : 'B001'));
             $facturador = $this->resolveFacturador($data['facturador_id'] ?? null);
             $detalles = $this->normalizarDetalles($data['detalles'] ?? []);
-            $this->validarCliente($cliente, $tipoDocumento);
+            $this->validarCliente($cliente, $tipoDocumento, $data['receptor_documento'] ?? null);
 
             $correlativo = $data['correlativo'] ?? $this->siguienteCorrelativo($tipoDocumento, $serie);
             $totales = $this->calcularTotales($detalles, (float) $facturador->porcentaje_igv);
@@ -38,6 +40,9 @@ class ComprobanteService
 
             $comprobante = Comprobante::create([
                 'cliente_id' => $cliente->id,
+                'receptor_documento' => $cliente ? null : preg_replace('/\D/', '', (string) $data['receptor_documento']),
+                'receptor_nombre' => $cliente ? null : trim((string) $data['receptor_nombre']),
+                'receptor_direccion' => $cliente ? null : ($data['receptor_direccion'] ?? null),
                 'contrato_id' => $data['contrato_id'] ?? null,
                 'cuota_id' => $data['cuota_id'] ?? null,
                 'facturador_id' => $facturador->id,
@@ -143,7 +148,10 @@ class ComprobanteService
             $totales = $this->calcularTotales($detalles, (float) $facturador->porcentaje_igv);
 
             $comprobante->update([
-                'cliente_id' => $cliente->id,
+                'cliente_id' => $cliente?->id,
+                'receptor_documento' => $cliente ? null : preg_replace('/\D/', '', (string) $data['receptor_documento']),
+                'receptor_nombre' => $cliente ? null : trim((string) $data['receptor_nombre']),
+                'receptor_direccion' => $cliente ? null : ($data['receptor_direccion'] ?? null),
                 'facturador_id' => $facturador->id,
                 'tipo_documento' => $tipoDocumento,
                 'serie' => strtoupper($data['serie'] ?? $comprobante->serie),
@@ -251,25 +259,32 @@ class ComprobanteService
         return ((int) $ultimo) + 1;
     }
 
-    private function validarCliente(Cliente $cliente, string $tipoDocumento): void
+    private function validarCliente(?Cliente $cliente, string $tipoDocumento, ?string $receptorDocumento = null): void
     {
-        $rucResolvido = $cliente->ruc ?: $cliente->parent_cliente?->ruc ?: $cliente->parent_cliente?->parent_cliente?->ruc;
+        $rucResolvido = $cliente
+            ? ($cliente->ruc ?: $cliente->parent_cliente?->ruc ?: $cliente->parent_cliente?->parent_cliente?->ruc)
+            : $receptorDocumento;
         if ($tipoDocumento === 'F' && !preg_match('/^\d{11}$/', (string) $rucResolvido)) {
             throw ValidationException::withMessages([
-                'cliente_id' => 'Para emitir factura el cliente debe tener RUC de 11 digitos.',
+                'cliente_id' => 'Para emitir factura el receptor debe tener RUC de 11 dígitos.',
+            ]);
+        }
+        if ($tipoDocumento === 'B' && !preg_match('/^\d{8}$|^\d{11}$/', (string) ($cliente ? ($rucResolvido ?: $cliente->contactos_clientes->first()?->dni) : $receptorDocumento))) {
+            throw ValidationException::withMessages([
+                'receptor_documento' => 'Para emitir boleta registra un DNI de 8 dígitos o RUC de 11 dígitos.',
             ]);
         }
     }
 
-    private function validarPermisoFacturacion(Cliente $cliente, ?Contrato $contrato = null): void
+    private function validarPermisoFacturacion(?Cliente $cliente, ?Contrato $contrato = null): void
     {
-        if ($contrato && (int) $contrato->cliente_id !== (int) $cliente->id) {
+        if ($contrato && $cliente && (int) $contrato->cliente_id !== (int) $cliente->id) {
             throw ValidationException::withMessages([
                 'contrato_id' => 'El contrato seleccionado no pertenece al cliente.',
             ]);
         }
 
-        if (($contrato && $contrato->noDebeFacturarse()) || $cliente->noDebeFacturarse()) {
+        if (($contrato && $contrato->noDebeFacturarse()) || ($cliente && $cliente->noDebeFacturarse())) {
             throw ValidationException::withMessages([
                 'facturacion' => 'Este cliente o contrato está marcado como No facturado. La deuda y los pagos se controlan normalmente, pero no se permite emitir comprobantes.',
             ]);
@@ -367,14 +382,15 @@ class ComprobanteService
         $grandParent = $parent?->parent_cliente;
         $contacto = $cliente->contactos_clientes->first() ?: $parent?->contactos_clientes?->first();
 
-        $rucResolvido = $cliente->ruc ?: $parent?->ruc ?: $grandParent?->ruc;
-        $razonSocialResolvida = $cliente->razon_social
+        $rucResolvido = $cliente?->ruc ?: $parent?->ruc ?: $grandParent?->ruc ?: $comprobante->receptor_documento;
+        $razonSocialResolvida = $cliente?->razon_social
             ?: ($cliente->ruc ? $cliente->nombre_comercial : null)
             ?: $parent?->razon_social
             ?: $grandParent?->razon_social
-            ?: $cliente->nombre_comercial
+            ?: $cliente?->nombre_comercial
             ?: $contacto?->nombre;
-        $direccionResolvida = $cliente->direccion ?: $parent?->direccion ?: $grandParent?->direccion;
+        $razonSocialResolvida = $razonSocialResolvida ?: $comprobante->receptor_nombre;
+        $direccionResolvida = $cliente?->direccion ?: $parent?->direccion ?: $grandParent?->direccion ?: $comprobante->receptor_direccion;
 
         $razonSocialLimpia = $this->limpiarTexto($razonSocialResolvida, 100);
         $direccionLimpia = $this->limpiarTexto($direccionResolvida, 100);
