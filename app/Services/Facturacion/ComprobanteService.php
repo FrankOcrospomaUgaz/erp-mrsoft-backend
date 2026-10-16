@@ -41,7 +41,7 @@ class ComprobanteService
             $comprobante = Comprobante::create([
                 'cliente_id' => $cliente?->id,
                 'receptor_documento' => $cliente ? null : preg_replace('/\D/', '', (string) $data['receptor_documento']),
-                'receptor_nombre' => $cliente ? null : trim((string) $data['receptor_nombre']),
+                'receptor_nombre' => $cliente ? null : (trim((string) ($data['receptor_nombre'] ?? '')) ?: 'RECEPTOR ' . $data['receptor_documento']),
                 'receptor_direccion' => $cliente ? null : ($data['receptor_direccion'] ?? null),
                 'contrato_id' => $data['contrato_id'] ?? null,
                 'cuota_id' => $data['cuota_id'] ?? null,
@@ -150,7 +150,7 @@ class ComprobanteService
             $comprobante->update([
                 'cliente_id' => $cliente?->id,
                 'receptor_documento' => $cliente ? null : preg_replace('/\D/', '', (string) $data['receptor_documento']),
-                'receptor_nombre' => $cliente ? null : trim((string) $data['receptor_nombre']),
+                'receptor_nombre' => $cliente ? null : (trim((string) ($data['receptor_nombre'] ?? '')) ?: 'RECEPTOR ' . $data['receptor_documento']),
                 'receptor_direccion' => $cliente ? null : ($data['receptor_direccion'] ?? null),
                 'facturador_id' => $facturador->id,
                 'tipo_documento' => $tipoDocumento,

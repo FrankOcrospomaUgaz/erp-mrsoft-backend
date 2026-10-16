@@ -489,7 +489,7 @@ class ComprobanteController extends Controller
         return Validator::make($data, [
             'cliente_id' => array_merge(['nullable', 'integer', 'exists:clientes,id'], $masivo ? [] : ['required_without:receptor_documento']),
             'receptor_documento' => ['nullable', 'required_without:cliente_id', 'regex:/^\d{8,11}$/'],
-            'receptor_nombre' => ['nullable', 'required_with:receptor_documento', 'string', 'max:255'],
+            'receptor_nombre' => ['nullable', 'string', 'max:255'],
             'receptor_direccion' => ['nullable', 'string', 'max:255'],
             'cliente_ids' => [$masivo ? 'required' : 'nullable', 'array'],
             'cliente_ids.*' => ['integer', 'exists:clientes,id'],
