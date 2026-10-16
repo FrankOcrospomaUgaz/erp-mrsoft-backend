@@ -34,6 +34,8 @@ class ComprobanteController extends Controller
                 $query->where(function ($query) use ($search) {
                     $query->where('serie', 'ILIKE', "%{$search}%")
                     ->orWhereRaw('CAST(correlativo AS TEXT) ILIKE ?', ["%{$search}%"])
+                    ->orWhere('receptor_documento', 'ILIKE', "%{$search}%")
+                    ->orWhere('receptor_nombre', 'ILIKE', "%{$search}%")
                     ->orWhereHas('cliente', function ($cliente) use ($search) {
                         $cliente->where('ruc', 'ILIKE', "%{$search}%")
                             ->orWhere('razon_social', 'ILIKE', "%{$search}%")
