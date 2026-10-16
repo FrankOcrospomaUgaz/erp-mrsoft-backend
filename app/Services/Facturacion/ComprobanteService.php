@@ -39,7 +39,7 @@ class ComprobanteService
             $fecha = $data['fecha_emision'] ?? $ahoraFiscal->toDateString();
 
             $comprobante = Comprobante::create([
-                'cliente_id' => $cliente->id,
+                'cliente_id' => $cliente?->id,
                 'receptor_documento' => $cliente ? null : preg_replace('/\D/', '', (string) $data['receptor_documento']),
                 'receptor_nombre' => $cliente ? null : trim((string) $data['receptor_nombre']),
                 'receptor_direccion' => $cliente ? null : ($data['receptor_direccion'] ?? null),
@@ -378,13 +378,13 @@ class ComprobanteService
     private function armarPayload(Comprobante $comprobante, Facturador $facturador): array
     {
         $cliente = $comprobante->cliente;
-        $parent = $cliente->parent_cliente;
+        $parent = $cliente?->parent_cliente;
         $grandParent = $parent?->parent_cliente;
-        $contacto = $cliente->contactos_clientes->first() ?: $parent?->contactos_clientes?->first();
+        $contacto = $cliente?->contactos_clientes?->first() ?: $parent?->contactos_clientes?->first();
 
         $rucResolvido = $cliente?->ruc ?: $parent?->ruc ?: $grandParent?->ruc ?: $comprobante->receptor_documento;
         $razonSocialResolvida = $cliente?->razon_social
-            ?: ($cliente->ruc ? $cliente->nombre_comercial : null)
+            ?: ($cliente?->ruc ? $cliente?->nombre_comercial : null)
             ?: $parent?->razon_social
             ?: $grandParent?->razon_social
             ?: $cliente?->nombre_comercial

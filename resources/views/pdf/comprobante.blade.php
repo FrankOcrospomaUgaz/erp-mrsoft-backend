@@ -39,15 +39,15 @@
             </tr>
             <tr>
                 <td class="bold">Señor(es):</td>
-                <td>{{ $cliente?->razon_social ?: $cliente?->nombre_comercial ?: $contacto?->nombre ?: '-' }}</td>
+                <td>{{ $cliente?->razon_social ?: $cliente?->nombre_comercial ?: $comprobante->receptor_nombre ?: $contacto?->nombre ?: '-' }}</td>
             </tr>
             <tr>
                 <td class="bold">RUC/DNI:</td>
-                <td>{{ $cliente?->ruc ?: $contacto?->dni ?: '-' }}</td>
+                <td>{{ $cliente?->ruc ?: $comprobante->receptor_documento ?: $contacto?->dni ?: '-' }}</td>
             </tr>
             <tr>
                 <td class="bold">Direccion:</td>
-                <td>{{ $cliente?->direccion ?: '-' }}</td>
+                <td>{{ $cliente?->direccion ?: $comprobante->receptor_direccion ?: '-' }}</td>
             </tr>
             <tr>
                 <td class="bold">Moneda:</td>
