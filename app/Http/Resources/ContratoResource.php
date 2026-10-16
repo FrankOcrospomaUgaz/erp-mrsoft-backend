@@ -44,6 +44,14 @@ class ContratoResource extends JsonResource
 
             'cliente' => $this->whenLoaded('cliente', fn () => $this->cliente),
             'cuotas'  => $this->whenLoaded('cuotas', fn () => $this->cuotas),
+            'documentos' => $this->whenLoaded('documentos', fn () => $this->documentos->map(fn ($documento) => [
+                'id' => $documento->id,
+                'contrato_id' => $documento->contrato_id,
+                'nombre_original' => $documento->nombre_original,
+                'mime_type' => $documento->mime_type,
+                'tamanio' => $documento->tamanio,
+                'created_at' => $documento->created_at?->toIso8601String(),
+            ])->values()),
 
             'contrato_producto_modulos' => $this->whenLoaded('contratoProductoModulos', function () {
                 return $this->contratoProductoModulos->map(function ($cpm) {

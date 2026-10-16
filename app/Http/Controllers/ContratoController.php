@@ -67,6 +67,7 @@ class ContratoController extends Controller
         $query = Contrato::with([
             'cliente',
             'cuotas',
+            'documentos',
             'contratoProductoModulos.modulo',
             'contratoProductoModulos.producto',
         ])->when($clienteIds, fn ($query) => $query->whereIn('cliente_id', $clienteIds));
@@ -187,6 +188,7 @@ class ContratoController extends Controller
         $contrato = Contrato::with([
             'cliente',
             'cuotas',
+            'documentos',
             'contratoProductoModulos.modulo',
             'contratoProductoModulos.producto',
         ])->find($id);

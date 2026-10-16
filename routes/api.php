@@ -32,6 +32,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('contratos/vigentes', [App\Http\Controllers\ContratoController::class, 'vigentes']);
     Route::get('contratos/{id}/pdf', [App\Http\Controllers\ContratoController::class, 'pdf']);
     Route::get('contratos/{id}/word', [App\Http\Controllers\ContratoController::class, 'word']);
+    Route::get('contratos/{contrato}/documentos', [App\Http\Controllers\ContratoDocumentoController::class, 'index']);
+    Route::get('documentos-contrato/{documento}/descargar', [App\Http\Controllers\ContratoDocumentoController::class, 'download']);
     Route::apiResource('contratos', App\Http\Controllers\ContratoController::class)->only(['index', 'show']);
     Route::post('contratos/{id}/firmar-cliente', [App\Http\Controllers\ContratoController::class, 'firmarCliente']);
     Route::put('contratos/{id}/acta-variables', [App\Http\Controllers\ContratoController::class, 'saveActaVariables']);
@@ -83,6 +85,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::apiResource('contactos', App\Http\Controllers\ContactoController::class)->only(['index', 'show', 'update', 'destroy']);
         Route::post('contratos/{id}/firmas', [App\Http\Controllers\ContratoController::class, 'guardarFirmas']);
         Route::apiResource('contratos', App\Http\Controllers\ContratoController::class)->only(['store', 'update', 'destroy']);
+        Route::post('contratos/{contrato}/documentos', [App\Http\Controllers\ContratoDocumentoController::class, 'store']);
+        Route::delete('documentos-contrato/{documento}', [App\Http\Controllers\ContratoDocumentoController::class, 'destroy']);
         Route::post('cuotas/{cuota}/reenviar-factura', [App\Http\Controllers\CuotaController::class, 'reenviarFactura']);
         Route::get('cuotas/siguiente-correlativo', [App\Http\Controllers\CuotaController::class, 'siguienteCorrelativo']);
         Route::post('cuotas/{cuota}/generar-factura', [App\Http\Controllers\CuotaController::class, 'generarFactura']);

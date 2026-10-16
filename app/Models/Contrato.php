@@ -91,6 +91,11 @@ class Contrato extends Model
         return $this->hasMany(\App\Models\ContratoProductoModulo::class, 'contrato_id');
     }
 
+    public function documentos(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(ContratoDocumento::class, 'contrato_id');
+    }
+
     public function noDebeFacturarse(): bool
     {
         return (bool) $this->no_facturado || (bool) $this->cliente?->noDebeFacturarse();
