@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Services\Facturacion\SunatClient;
+use App\Models\Facturador;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
 
@@ -68,5 +69,19 @@ class SunatClientTest extends TestCase
         ]);
 
         $this->assertStringNotContainsString('no permite duplicarlo', $respuesta['mensaje']);
+    }
+
+    public function test_autentica_con_el_usuario_wsdl_y_no_con_el_ruc_emisor(): void
+    {
+        $facturador = (new Facturador())->forceFill([
+            'ruc' => '20600000000',
+            'usuario_sol' => 'usuario-wsdl',
+            'clave_sol' => 'clave-wsdl',
+        ]);
+        $client = new SunatClient();
+        $method = new ReflectionMethod($client, 'credencialesWsdl');
+        $method->setAccessible(true);
+
+        $this->assertSame(['usuario-wsdl', 'clave-wsdl'], $method->invoke($client, $facturador));
     }
 }
