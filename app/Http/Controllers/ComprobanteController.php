@@ -257,17 +257,19 @@ class ComprobanteController extends Controller
         $ahora = now(config('facturacion.timezone', 'America/Lima'));
         $validator = Validator::make($request->all(), [
             'fecha_inicio' => ['nullable', 'date_format:Y-m-d'],
-            'fecha_fin' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:fecha_inicio'],
+            'fecha_fin' => ['nullable', 'date_format:Y-m-d'],
         ]);
         if ($validator->fails()) {
             return response()->json(['status' => 422, 'message' => 'El rango de fechas no es válido.', 'errors' => $validator->errors()], 422);
         }
 
         $fechas = $validator->validated();
-        $resultado = $syncService->sincronizar(
-            $fechas['fecha_inicio'] ?? $ahora->copy()->startOfMonth()->toDateString(),
-            $fechas['fecha_fin'] ?? $ahora->toDateString()
-        );
+        $fechaInicio = $fechas['fecha_inicio'] ?? $ahora->copy()->startOfMonth()->toDateString();
+        $fechaFin = $fechas['fecha_fin'] ?? $ahora->toDateString();
+        if (Carbon\Carbon::parse($fechaFin)->lt(Carbon\Carbon::parse($fechaInicio))) {
+            return response()->json(['status' => 422, 'message' => 'La fecha final debe ser igual o posterior a la fecha inicial.'], 422);
+        }
+        $resultado = $syncService->sincronizar($fechaInicio, $fechaFin);
 
         return response()->json([
             'status' => 200,

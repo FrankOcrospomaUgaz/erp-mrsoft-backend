@@ -127,11 +127,28 @@ class FacturadorSyncService
         }
         $data = is_array($data) ? $data : [];
         $referencia = (string) ($item['nombre_solicitud'] ?? $data['numero'] ?? $data['numeracion'] ?? '');
-        $serie = (string) ($data['serie'] ?? '');
-        $correlativo = $data['correlativo'] ?? $data['numero_correlativo'] ?? null;
-        if (!$serie && preg_match('/^([A-Z0-9]+)-(\d+)$/i', $referencia, $parts)) {
+        $documento = $data['comprobante'] ?? null;
+        if (is_string($documento)) {
+            $documento = json_decode($documento, true) ?: [];
+        }
+        if (is_object($documento)) {
+            $documento = (array) $documento;
+        }
+        $documento = is_array($documento) ? $documento : [];
+
+        $tipo = strtoupper((string) ($item['tipo_documento'] ?? ''));
+        $referenciaDocumento = $documento['numerofactura'] ?? $documento['numeroboleta'] ?? $referencia;
+        if (preg_match('/([A-Z0-9]{4})-(\d{1,8})/i', (string) $referenciaDocumento, $parts)) {
             $serie = strtoupper($parts[1]);
             $correlativo = (int) $parts[2];
+        } else {
+            $serieRaw = (string) ($data['serie'] ?? $data['seriefactura'] ?? $data['serieboleta'] ?? '');
+            $serie = strtoupper($serieRaw);
+            if ($serie && preg_match('/^\d{3}$/', $serie)) {
+                $serie = ($tipo === 'B' || isset($data['serieboleta']) ? 'B' : 'F') . $serie;
+            }
+            $correlativo = $data['correlativo'] ?? $data['numero_correlativo']
+                ?? $data['correlativofactura'] ?? $data['correlativoboleta'] ?? null;
         }
         if (!$serie || $correlativo === null) {
             return null;
@@ -139,7 +156,7 @@ class FacturadorSyncService
 
         return $locales->first(fn ($local) => strtoupper($local->serie) === strtoupper($serie)
             && (int) $local->correlativo === (int) $correlativo
-            && strtoupper((string) ($item['tipo_documento'] ?? $local->tipo_documento)) === $local->tipo_documento);
+            && (!in_array($tipo, ['F', 'B'], true) || $tipo === $local->tipo_documento));
     }
 
     private function mapearEstado(string $estado, string $tipoDocumento): ?string
