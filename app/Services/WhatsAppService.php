@@ -85,7 +85,7 @@ class WhatsAppService
                 ];
             }
 
-            $numeroComprobante = $comprobante->serie . '-' . str_pad((string) $comprobante->correlativo, 6, '0', STR_PAD_LEFT);
+            $numeroComprobante = $comprobante->serie . '-' . str_pad((string) $comprobante->correlativo, 8, '0', STR_PAD_LEFT);
             $filename = 'comprobante-' . $numeroComprobante . '.pdf';
 
             // 1. Subir PDF a Meta

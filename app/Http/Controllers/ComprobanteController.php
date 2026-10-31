@@ -309,7 +309,7 @@ class ComprobanteController extends Controller
             'cliente' => $cliente,
             'contacto' => $contacto,
             'tipoDocumento' => $tipoDocumento,
-            'numeroComprobante' => $comprobante->serie . '-' . str_pad((string) $comprobante->correlativo, 6, '0', STR_PAD_LEFT),
+            'numeroComprobante' => $comprobante->serie . '-' . str_pad((string) $comprobante->correlativo, 8, '0', STR_PAD_LEFT),
             'monedaSimbolo' => strtoupper((string) $comprobante->moneda) === 'USD' ? '$' : 'S/',
             'formaPago' => $comprobante->forma_pago === 'D' ? 'CREDITO' : 'CONTADO',
         ])->setPaper('a4');
@@ -497,7 +497,7 @@ class ComprobanteController extends Controller
             'cuota_id' => ['nullable', 'integer', 'exists:cuotas,id'],
             'facturador_id' => ['nullable', 'integer', 'exists:facturadores,id'],
             'tipo_documento' => ['required', Rule::in(['F', 'B'])],
-            'serie' => ['nullable', 'string', 'max:8'],
+            'serie' => ['nullable', 'string', 'size:4', 'regex:/^[FB]\d{3}$/'],
             'correlativo' => ['nullable', 'integer', 'min:1'],
             'moneda' => ['nullable', 'string', 'size:3'],
             'forma_pago' => ['nullable', Rule::in(['C', 'D'])],
@@ -531,7 +531,7 @@ class ComprobanteController extends Controller
         }
 
         if ($field === 'zip_path') {
-            $formattedName = $comprobante->serie . '-' . str_pad((string) $comprobante->correlativo, 6, '0', STR_PAD_LEFT) . '-SUNAT.zip';
+            $formattedName = $comprobante->serie . '-' . str_pad((string) $comprobante->correlativo, 8, '0', STR_PAD_LEFT) . '-SUNAT.zip';
 
             if ($comprobante->zip_path && Storage::disk('local')->exists($comprobante->zip_path)) {
                 return Storage::disk('local')->download($comprobante->zip_path, $formattedName);
@@ -540,7 +540,7 @@ class ComprobanteController extends Controller
             if (!empty($comprobante->sunat_response['fileZIPBASE64'])) {
                 $zip = base64_decode((string) $comprobante->sunat_response['fileZIPBASE64'], true);
                 if ($zip !== false) {
-                    $base = 'facturacion/' . $comprobante->serie . '-' . str_pad((string) $comprobante->correlativo, 6, '0', STR_PAD_LEFT);
+                    $base = 'facturacion/' . $comprobante->serie . '-' . str_pad((string) $comprobante->correlativo, 8, '0', STR_PAD_LEFT);
                     $path = $base . '/sunat.zip';
                     Storage::disk('local')->put($path, $zip);
                     $comprobante->update(['zip_path' => $path]);

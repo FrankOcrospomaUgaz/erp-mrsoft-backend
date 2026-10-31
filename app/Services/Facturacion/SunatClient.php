@@ -161,10 +161,9 @@ class SunatClient
     private function simularRespuesta(Comprobante $comprobante): array
     {
         $nombre = sprintf(
-            '%s-%s-%s',
-            $comprobante->tipo_documento,
+            '%s-%s',
             $comprobante->serie,
-            str_pad((string) $comprobante->correlativo, 6, '0', STR_PAD_LEFT)
+            str_pad((string) $comprobante->correlativo, 8, '0', STR_PAD_LEFT)
         );
 
         return [

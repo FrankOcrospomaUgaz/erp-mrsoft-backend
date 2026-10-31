@@ -22,7 +22,7 @@ class ComprobanteResource extends JsonResource
             'tipo_documento' => $this->tipo_documento,
             'serie' => $this->serie,
             'correlativo' => $this->correlativo,
-            'numero' => $this->serie . '-' . str_pad((string) $this->correlativo, 6, '0', STR_PAD_LEFT),
+            'numero' => $this->serie . '-' . str_pad((string) $this->correlativo, 8, '0', STR_PAD_LEFT),
             'moneda' => $this->moneda,
             'forma_pago' => $this->forma_pago,
             'fecha_emision' => optional($this->fecha_emision)->format('Y-m-d'),
@@ -40,6 +40,8 @@ class ComprobanteResource extends JsonResource
             'pdf_path' => $this->pdf_path,
             'sunat_response' => $this->when($request->routeIs('comprobantes.show'), $this->sunat_response),
             'sunat_request' => $this->when($request->routeIs('comprobantes.show'), $this->sunat_request),
+            'tiene_cdr_aceptado' => filled($this->zip_path)
+                || filled(data_get($this->sunat_response, 'fileZIPBASE64')),
             'error_code' => $this->error_code,
             'error_text' => $this->error_text,
             'facturador_modo' => $this->whenLoaded('facturador', fn () => $this->facturador?->modo),

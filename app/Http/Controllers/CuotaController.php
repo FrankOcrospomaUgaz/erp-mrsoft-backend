@@ -343,6 +343,10 @@ class CuotaController extends Controller
             return $this->generarFacturaManual($request, $cuota);
         }
 
+        $request->validate([
+            'descripcion' => ['nullable', 'string', 'max:255'],
+        ]);
+
         try {
             $resultado = DB::transaction(function () use ($request, $cuota, $service) {
                 $cuotaBloqueada = Cuota::with('contrato.cliente')
@@ -358,11 +362,12 @@ class CuotaController extends Controller
                 }
 
                 $contrato = $cuotaBloqueada->contrato;
-                $descripcion = sprintf(
+                $descripcionPredeterminada = sprintf(
                     'Cuota del contrato %s - vencimiento %s',
                     $contrato->numero,
                     optional($cuotaBloqueada->fecha_vencimiento)->format('d/m/Y')
                 );
+                $descripcion = trim((string) $request->input('descripcion', '')) ?: $descripcionPredeterminada;
 
                 $serie = strtoupper($request->get('serie', 'F001'));
                 $correlativoSolicitado = $request->filled('correlativo') ? (int) $request->get('correlativo') : null;
@@ -419,7 +424,7 @@ class CuotaController extends Controller
     private function generarFacturaManual(Request $request, Cuota $cuota)
     {
         $validator = Validator::make($request->all(), [
-            'serie' => 'required|string|max:10',
+            'serie' => 'required|string|size:4|regex:/^F\d{3}$/',
             'correlativo' => 'required|integer|min:1',
             'fecha_emision' => 'nullable|date',
             'monto_total' => 'nullable|numeric|min:0',
@@ -454,7 +459,7 @@ class CuotaController extends Controller
                 $pdfPath = null;
                 if ($request->hasFile('pdf_file')) {
                     $file = $request->file('pdf_file');
-                    $filename = sprintf('%s-%s-%s.pdf', $serie, str_pad((string)$correlativo, 6, '0', STR_PAD_LEFT), time());
+                    $filename = sprintf('%s-%s-%s.pdf', $serie, str_pad((string)$correlativo, 8, '0', STR_PAD_LEFT), time());
                     $pdfPath = $file->storeAs('facturas_manuales', $filename, 'local');
                 }
 

@@ -81,7 +81,7 @@ class ComprobanteService
                 ->lockForUpdate()
                 ->findOrFail($comprobante->id);
 
-            if (in_array($comprobante->estado, ['M', 'T'], true)) {
+            if (in_array($comprobante->estado, ['M', 'T', 'U'], true)) {
                 return $comprobante;
             }
 
@@ -134,9 +134,10 @@ class ComprobanteService
                 ->lockForUpdate()
                 ->findOrFail($comprobante->id);
 
-            if (in_array($comprobante->estado, ['M', 'T', 'U'], true)) {
+            if ($comprobante->estado === 'U'
+                || (in_array($comprobante->estado, ['M', 'T'], true) && $this->tieneCdrAceptado($comprobante))) {
                 throw ValidationException::withMessages([
-                    'comprobante' => 'Un comprobante aceptado no se puede editar. Debes emitir una nota de credito.',
+                    'comprobante' => 'Este comprobante ya cuenta con constancia CDR/ZIP aceptada por SUNAT y no se puede modificar. Debes emitir una nota de credito.',
                 ]);
             }
 
@@ -257,6 +258,12 @@ class ComprobanteService
             ->value('correlativo');
 
         return ((int) $ultimo) + 1;
+    }
+
+    private function tieneCdrAceptado(Comprobante $comprobante): bool
+    {
+        return filled($comprobante->zip_path)
+            || filled(data_get($comprobante->sunat_response, 'fileZIPBASE64'));
     }
 
     private function validarCliente(?Cliente $cliente, string $tipoDocumento, ?string $receptorDocumento = null): void
@@ -395,7 +402,7 @@ class ComprobanteService
         $razonSocialLimpia = $this->limpiarTexto($razonSocialResolvida, 100);
         $direccionLimpia = $this->limpiarTexto($direccionResolvida, 100);
 
-        $numero = $comprobante->serie . '-' . str_pad((string) $comprobante->correlativo, 6, '0', STR_PAD_LEFT);
+        $numero = $comprobante->serie . '-' . str_pad((string) $comprobante->correlativo, 8, '0', STR_PAD_LEFT);
         $documentoCliente = preg_replace('/\D/', '', (string) ($rucResolvido ?: $contacto?->dni ?: ''));
         $tipoDocumentoCliente = $comprobante->tipo_documento === 'F'
             ? 6
@@ -437,8 +444,10 @@ class ComprobanteService
 
         return [
             'token' => (string) ($facturador->token ?? ''),
-            $serieKey => $comprobante->serie,
-            $correlativoKey => (string) $comprobante->correlativo,
+            // El facturador agrega la letra del tipo de documento al representar
+            // la serie; enviamos solo los tres dígitos para evitar FF002.
+            $serieKey => preg_replace('/^[FB]/', '', $comprobante->serie),
+            $correlativoKey => str_pad((string) $comprobante->correlativo, 8, '0', STR_PAD_LEFT),
             'doc' => (string) $documentoCliente,
             'nombre' => (string) $razonSocialLimpia,
             'direccion' => (string) $direccionLimpia,
@@ -449,7 +458,7 @@ class ComprobanteService
 
     private function guardarArchivos(Comprobante $comprobante, array $payload, array $respuesta): array
     {
-        $base = 'facturacion/' . $comprobante->serie . '-' . str_pad((string) $comprobante->correlativo, 6, '0', STR_PAD_LEFT);
+        $base = 'facturacion/' . $comprobante->serie . '-' . str_pad((string) $comprobante->correlativo, 8, '0', STR_PAD_LEFT);
         $xmlPath = $base . '/request.json';
         $cdrPath = $base . '/response.json';
 
