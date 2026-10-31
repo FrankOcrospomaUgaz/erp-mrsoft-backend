@@ -61,17 +61,16 @@ class SunatClient
             ]);
 
             $operation = $comprobante->tipo_documento === 'B' ? 'enviarBoleta' : 'enviarFactura';
-            $rucEmisor = (string) ($facturador->ruc ?: $facturador->usuario_sol);
-            $claveEmisor = (string) ($facturador->clave_sol ?: $facturador->token);
+            [$usuarioWsdl, $claveWsdl] = $this->credencialesWsdl($facturador);
 
-            // El WSDL es RPC/encoded y recibe tres argumentos posicionales: ruc, password, json
+            // HotelHUB identifica los argumentos del WSDL por nombre: ruc, password y json.
             $raw = $client->__soapCall($operation, [
-                $rucEmisor,
-                $claveEmisor,
-                json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
+                'ruc' => $usuarioWsdl,
+                'password' => $claveWsdl,
+                'json' => json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
             ]);
 
-            return $this->normalizarRespuesta($raw, [$rucEmisor, $claveEmisor]);
+            return $this->normalizarRespuesta($raw, [$usuarioWsdl, $claveWsdl]);
         } catch (SoapFault $e) {
             return [
                 'ok' => false,
@@ -101,17 +100,24 @@ class SunatClient
         return str_contains($url, '?') ? $url : $url . '?wsdl';
     }
 
+    private function credencialesWsdl(Facturador $facturador): array
+    {
+        return [
+            trim((string) ($facturador->usuario_sol ?: $facturador->ruc)),
+            (string) ($facturador->clave_sol ?: $facturador->token),
+        ];
+    }
+
     private function consultarFacturador(Facturador $facturador, string $operacion, array $consulta): array
     {
         $wsdl = $facturador->wsdl_consulta ?: config('facturacion.wsdl.consulta');
-        $ruc = (string) ($facturador->ruc ?: $facturador->usuario_sol);
-        $clave = (string) ($facturador->clave_sol ?: $facturador->token);
+        [$usuarioWsdl, $claveWsdl] = $this->credencialesWsdl($facturador);
 
         if ($facturador->modo !== 'produccion') {
             return ['ok' => false, 'code' => 'SIMULACION', 'mensaje' => 'La consulta al facturador requiere modo producción.'];
         }
 
-        if (!$wsdl || !$ruc || !$clave) {
+        if (!$wsdl || !$usuarioWsdl || !$claveWsdl) {
             return ['ok' => false, 'code' => 'CONFIG', 'mensaje' => 'Falta configurar el WSDL de consulta o sus credenciales.'];
         }
 
@@ -124,12 +130,12 @@ class SunatClient
             ]);
 
             $raw = $client->__soapCall($operacion, [
-                $ruc,
-                $clave,
-                json_encode($consulta, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
+                'ruc' => $usuarioWsdl,
+                'password' => $claveWsdl,
+                'json' => json_encode($consulta, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
             ]);
 
-            return $this->normalizarRespuesta($raw, [$ruc, $clave]);
+            return $this->normalizarRespuesta($raw, [$usuarioWsdl, $claveWsdl]);
         } catch (SoapFault $e) {
             return [
                 'ok' => false,

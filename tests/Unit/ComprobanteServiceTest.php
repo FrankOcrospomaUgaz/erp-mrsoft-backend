@@ -127,7 +127,7 @@ class ComprobanteServiceTest extends TestCase
         $this->assertSame('001', $payload['seriefactura']);
         $this->assertSame('00000003', $payload['correlativofactura']);
         $this->assertSame('20678912345', $payload['doc']);
-        $this->assertSame('F001-00000003', $documento['numerofactura']);
+        $this->assertSame('001-00000003', $documento['numerofactura']);
         $this->assertEquals(118.0, $documento['detalles'][0]['precioventaunitarioxitem']);
         $this->assertArrayHasKey('tasaisc', $documento['detalles'][0]);
     }
