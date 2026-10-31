@@ -36,4 +36,37 @@ class SunatClientTest extends TestCase
         $this->assertFalse($respuesta['ok']);
         $this->assertSame('RESPUESTA_INVALIDA', $respuesta['code']);
     }
+
+    public function test_no_confunde_error_de_consulta_con_duplicado_y_oculta_credenciales(): void
+    {
+        $client = new SunatClient();
+        $method = new ReflectionMethod($client, 'normalizarRespuesta');
+        $method->setAccessible(true);
+
+        $respuesta = $method->invoke($client, [
+            'code' => 9,
+            'mensaje' => 'LA CONTRASEÑA NO ES CORRECTA. [20602871119,clave-prueba-privada]',
+            'file' => 'wsdl_factura_rc.php',
+            'line' => 43,
+        ], ['20602871119', 'clave-prueba-privada']);
+
+        $this->assertStringContainsString('LA CONTRASEÑA NO ES CORRECTA', $respuesta['mensaje']);
+        $this->assertStringNotContainsString('clave-prueba-privada', json_encode($respuesta));
+        $this->assertStringNotContainsString('20602871119', json_encode($respuesta));
+        $this->assertStringNotContainsString('no permite duplicarlo', $respuesta['mensaje']);
+    }
+
+    public function test_un_error_generico_de_consulta_no_afirma_que_la_serie_este_duplicada(): void
+    {
+        $client = new SunatClient();
+        $method = new ReflectionMethod($client, 'normalizarRespuesta');
+        $method->setAccessible(true);
+
+        $respuesta = $method->invoke($client, [
+            'code' => 9,
+            'mensaje' => 'ERROR EN LA CONSULTA',
+        ]);
+
+        $this->assertStringNotContainsString('no permite duplicarlo', $respuesta['mensaje']);
+    }
 }
