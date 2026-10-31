@@ -397,8 +397,9 @@ class ComprobanteService
         $direccionLimpia = $this->limpiarTexto($direccionResolvida, 100);
 
         $serieNumerica = $this->normalizarSerieFacturador($comprobante->tipo_documento, $comprobante->serie);
-        $prefijoSerie = $comprobante->tipo_documento === 'F' ? 'F' : 'B';
-        $numero = $prefijoSerie . $serieNumerica . '-' . str_pad((string) $comprobante->correlativo, 8, '0', STR_PAD_LEFT);
+        // El facturador agrega F/B según el campo seriefactura/serieboleta.
+        // HotelHUB envía también numerofactura/numeroboleta sin ese prefijo.
+        $numero = $serieNumerica . '-' . str_pad((string) $comprobante->correlativo, 8, '0', STR_PAD_LEFT);
         $documentoCliente = preg_replace('/\D/', '', (string) ($rucResolvido ?: $contacto?->dni ?: ''));
         $tipoDocumentoCliente = $comprobante->tipo_documento === 'F'
             ? 6
