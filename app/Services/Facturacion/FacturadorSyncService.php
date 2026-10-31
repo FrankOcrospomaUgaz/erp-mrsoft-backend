@@ -16,9 +16,16 @@ class FacturadorSyncService
     public function sincronizar(string $fechaInicio, string $fechaFin): array
     {
         $resumen = ['consultados' => 0, 'actualizados' => 0, 'cdr_descargados' => 0, 'errores' => []];
-        $facturadores = Facturador::query()
-            ->whereHas('comprobantes', fn ($query) => $query->whereBetween('fecha_emision', [$fechaInicio, $fechaFin]))
-            ->get();
+        // La sincronización consulta el buzón del emisor configurado actualmente.
+        // Los comprobantes antiguos pueden conservar un facturador histórico con
+        // credenciales vencidas, aunque el emisor activo ya tenga las correctas.
+        $facturadorActivo = Facturador::where('activo', true)->latest()->first();
+        $usarEmisorActivo = $facturadorActivo !== null;
+        $facturadores = $facturadorActivo
+            ? collect([$facturadorActivo])
+            : Facturador::query()
+                ->whereHas('comprobantes', fn ($query) => $query->whereBetween('fecha_emision', [$fechaInicio, $fechaFin]))
+                ->get();
 
         foreach ($facturadores as $facturador) {
             $respuesta = $this->sunatClient->descargarComprobantes($facturador, $fechaInicio, $fechaFin);
@@ -41,10 +48,12 @@ class FacturadorSyncService
                 continue;
             }
 
-            $locales = Comprobante::with('detalles')
-                ->where('facturador_id', $facturador->id)
-                ->whereBetween('fecha_emision', [$fechaInicio, $fechaFin])
-                ->get();
+            $localesQuery = Comprobante::with('detalles')
+                ->whereBetween('fecha_emision', [$fechaInicio, $fechaFin]);
+            if (!$usarEmisorActivo) {
+                $localesQuery->where('facturador_id', $facturador->id);
+            }
+            $locales = $localesQuery->get();
 
             foreach ($items as $item) {
                 $item = is_object($item) ? (array) $item : $item;
