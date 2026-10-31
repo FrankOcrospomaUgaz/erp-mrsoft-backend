@@ -9,6 +9,7 @@ use App\Models\Facturador;
 use App\Services\Facturacion\ComprobanteService;
 use App\Services\Facturacion\FacturadorSyncService;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
@@ -266,7 +267,7 @@ class ComprobanteController extends Controller
         $fechas = $validator->validated();
         $fechaInicio = $fechas['fecha_inicio'] ?? $ahora->copy()->startOfMonth()->toDateString();
         $fechaFin = $fechas['fecha_fin'] ?? $ahora->toDateString();
-        if (Carbon\Carbon::parse($fechaFin)->lt(Carbon\Carbon::parse($fechaInicio))) {
+        if (Carbon::parse($fechaFin)->lt(Carbon::parse($fechaInicio))) {
             return response()->json(['status' => 422, 'message' => 'La fecha final debe ser igual o posterior a la fecha inicial.'], 422);
         }
         $resultado = $syncService->sincronizar($fechaInicio, $fechaFin);
