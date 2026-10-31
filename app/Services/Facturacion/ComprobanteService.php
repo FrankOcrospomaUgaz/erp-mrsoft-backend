@@ -461,7 +461,10 @@ class ComprobanteService
             'nombre' => (string) $razonSocialLimpia,
             'direccion' => (string) $direccionLimpia,
             'total' => (float) $comprobante->total,
-            'comprobante' => json_encode($documento, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            // El integrador WSDL legado procesa este JSON dentro de una cadena
+            // SOAP. Escapar Unicode evita que tildes en descripciones rompan su
+            // parser, y json_decode las reconstruye sin perder el texto original.
+            'comprobante' => json_encode($documento, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
         ];
     }
 

@@ -67,7 +67,9 @@ class SunatClient
             $raw = $client->__soapCall($operation, [
                 'ruc' => $usuarioWsdl,
                 'password' => $claveWsdl,
-                'json' => json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
+                // El servicio SOAP legado puede fallar al recibir UTF-8 literal;
+                // JSON estándar escapa Unicode y conserva el texto al decodificarlo.
+                'json' => json_encode($payload, JSON_THROW_ON_ERROR),
             ]);
 
             return $this->normalizarRespuesta($raw, [$usuarioWsdl, $claveWsdl]);
