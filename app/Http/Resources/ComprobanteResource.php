@@ -40,8 +40,7 @@ class ComprobanteResource extends JsonResource
             'pdf_path' => $this->pdf_path,
             'sunat_response' => $this->when($request->routeIs('comprobantes.show'), $this->sunat_response),
             'sunat_request' => $this->when($request->routeIs('comprobantes.show'), $this->sunat_request),
-            'tiene_cdr_aceptado' => filled($this->zip_path)
-                || filled(data_get($this->sunat_response, 'fileZIPBASE64')),
+            'tiene_cdr_aceptado' => $this->tieneCdrAceptado(),
             'error_code' => $this->error_code,
             'error_text' => $this->error_text,
             'facturador_modo' => $this->whenLoaded('facturador', fn () => $this->facturador?->modo),

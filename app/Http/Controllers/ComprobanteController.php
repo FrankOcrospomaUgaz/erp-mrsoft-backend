@@ -7,6 +7,7 @@ use App\Models\Cliente;
 use App\Models\Comprobante;
 use App\Models\Facturador;
 use App\Services\Facturacion\ComprobanteService;
+use App\Services\Facturacion\FacturadorSyncService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -245,6 +246,36 @@ class ComprobanteController extends Controller
         }
 
         return response()->json(['status' => 200, 'data' => $resultados]);
+    }
+
+    public function sincronizarFacturador(Request $request, FacturadorSyncService $syncService)
+    {
+        if ($request->user()?->cliente_id) {
+            return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
+        }
+
+        $ahora = now(config('facturacion.timezone', 'America/Lima'));
+        $validator = Validator::make($request->all(), [
+            'fecha_inicio' => ['nullable', 'date_format:Y-m-d'],
+            'fecha_fin' => ['nullable', 'date_format:Y-m-d'],
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['status' => 422, 'message' => 'El rango de fechas no es válido.', 'errors' => $validator->errors()], 422);
+        }
+
+        $fechas = $validator->validated();
+        $fechaInicio = $fechas['fecha_inicio'] ?? $ahora->copy()->startOfMonth()->toDateString();
+        $fechaFin = $fechas['fecha_fin'] ?? $ahora->toDateString();
+        if (Carbon\Carbon::parse($fechaFin)->lt(Carbon\Carbon::parse($fechaInicio))) {
+            return response()->json(['status' => 422, 'message' => 'La fecha final debe ser igual o posterior a la fecha inicial.'], 422);
+        }
+        $resultado = $syncService->sincronizar($fechaInicio, $fechaFin);
+
+        return response()->json([
+            'status' => 200,
+            'message' => 'Sincronización con el facturador completada.',
+            'data' => $resultado,
+        ]);
     }
 
     public function downloadXml(Request $request, $id)

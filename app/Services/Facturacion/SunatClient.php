@@ -11,6 +11,21 @@ use SoapFault;
 
 class SunatClient
 {
+    public function descargarComprobantes(Facturador $facturador, string $fechaInicio, string $fechaFin): array
+    {
+        return $this->consultarFacturador($facturador, 'descargar', [
+            'fechainicio' => $fechaInicio,
+            'fechafinal' => $fechaFin,
+        ]);
+    }
+
+    public function descargarCdr(Facturador $facturador, string $idSolicitud): array
+    {
+        return $this->consultarFacturador($facturador, 'descargarCDR', [
+            'id_solicitud' => $idSolicitud,
+        ]);
+    }
+
     public function enviar(Comprobante $comprobante, Facturador $facturador, array $payload): array
     {
         if ($facturador->modo !== 'produccion') {
@@ -84,6 +99,50 @@ class SunatClient
     private function wsdlUrl(string $url): string
     {
         return str_contains($url, '?') ? $url : $url . '?wsdl';
+    }
+
+    private function consultarFacturador(Facturador $facturador, string $operacion, array $consulta): array
+    {
+        $wsdl = $facturador->wsdl_consulta ?: config('facturacion.wsdl.consulta');
+        $ruc = (string) ($facturador->ruc ?: $facturador->usuario_sol);
+        $clave = (string) ($facturador->clave_sol ?: $facturador->token);
+
+        if ($facturador->modo !== 'produccion') {
+            return ['ok' => false, 'code' => 'SIMULACION', 'mensaje' => 'La consulta al facturador requiere modo producción.'];
+        }
+
+        if (!$wsdl || !$ruc || !$clave) {
+            return ['ok' => false, 'code' => 'CONFIG', 'mensaje' => 'Falta configurar el WSDL de consulta o sus credenciales.'];
+        }
+
+        try {
+            $client = new SoapClient($this->wsdlUrl((string) $wsdl), [
+                'cache_wsdl' => WSDL_CACHE_NONE,
+                'connection_timeout' => 30,
+                'exceptions' => true,
+                'trace' => true,
+            ]);
+
+            $raw = $client->__soapCall($operacion, [
+                $ruc,
+                $clave,
+                json_encode($consulta, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
+            ]);
+
+            return $this->normalizarRespuesta($raw);
+        } catch (SoapFault $e) {
+            return [
+                'ok' => false,
+                'code' => 'SOAP',
+                'mensaje' => 'Error SOAP al consultar el facturador: ' . $e->getMessage(),
+            ];
+        } catch (\Throwable $e) {
+            return [
+                'ok' => false,
+                'code' => 'CONSULTA',
+                'mensaje' => 'No se pudo consultar el facturador: ' . $e->getMessage(),
+            ];
+        }
     }
 
     private function normalizarRespuesta(mixed $raw): array

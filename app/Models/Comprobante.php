@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Storage;
+use App\Services\Facturacion\CdrInspector;
 
 class Comprobante extends Model
 {
@@ -61,6 +63,31 @@ class Comprobante extends Model
         'sunat_request' => 'array',
         'sunat_response' => 'array',
     ];
+
+    public function tieneCdrAceptado(): bool
+    {
+        $archivosZip = [];
+
+        if ($this->zip_path && Storage::disk('local')->exists($this->zip_path)) {
+            $archivosZip[] = Storage::disk('local')->get($this->zip_path);
+        }
+
+        $zipBase64 = data_get($this->sunat_response, 'fileZIPBASE64');
+        if (is_string($zipBase64) && $zipBase64 !== '') {
+            $zip = base64_decode($zipBase64, true);
+            if ($zip !== false) {
+                $archivosZip[] = $zip;
+            }
+        }
+
+        foreach ($archivosZip as $zip) {
+            if (CdrInspector::contieneAceptacion($zip, (string) $this->serie, (int) $this->correlativo)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     public function cliente()
     {

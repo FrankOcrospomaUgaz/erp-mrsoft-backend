@@ -135,7 +135,7 @@ class ComprobanteService
                 ->findOrFail($comprobante->id);
 
             if ($comprobante->estado === 'U'
-                || (in_array($comprobante->estado, ['M', 'T'], true) && $this->tieneCdrAceptado($comprobante))) {
+                || (in_array($comprobante->estado, ['M', 'T'], true) && $comprobante->tieneCdrAceptado())) {
                 throw ValidationException::withMessages([
                     'comprobante' => 'Este comprobante ya cuenta con constancia CDR/ZIP aceptada por SUNAT y no se puede modificar. Debes emitir una nota de credito.',
                 ]);
@@ -258,12 +258,6 @@ class ComprobanteService
             ->value('correlativo');
 
         return ((int) $ultimo) + 1;
-    }
-
-    private function tieneCdrAceptado(Comprobante $comprobante): bool
-    {
-        return filled($comprobante->zip_path)
-            || filled(data_get($comprobante->sunat_response, 'fileZIPBASE64'));
     }
 
     private function validarCliente(?Cliente $cliente, string $tipoDocumento, ?string $receptorDocumento = null): void
