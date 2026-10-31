@@ -94,9 +94,21 @@ class ComprobanteService
                 ]);
             }
 
-            // Siempre se reconstruye para que un reintento use el contrato vigente
-            // del proveedor y cualquier correccion guardada.
-            $payload = $this->armarPayload($comprobante, $comprobante->facturador);
+            // Los reintentos deben usar el emisor activo configurado en Datos fiscales,
+            // incluidas las credenciales WSDL actuales, no una configuración histórica
+            // que quedó asociada al comprobante cuando se creó.
+            $facturadorEmision = Facturador::where('activo', true)->latest()->first()
+                ?? $comprobante->facturador;
+            if (!$facturadorEmision) {
+                throw ValidationException::withMessages([
+                    'facturador' => 'Configura un emisor activo antes de reenviar el comprobante.',
+                ]);
+            }
+            $comprobante->setRelation('facturador', $facturadorEmision);
+
+            // Siempre se reconstruye para que el reintento use la configuración vigente
+            // y cualquier corrección guardada en el comprobante.
+            $payload = $this->armarPayload($comprobante, $facturadorEmision);
             $comprobante->update([
                 'estado' => 'R',
                 'payload' => $payload,
@@ -106,7 +118,7 @@ class ComprobanteService
                 'error_text' => null,
             ]);
 
-            $respuesta = $this->sunatClient->enviar($comprobante, $comprobante->facturador, $payload);
+            $respuesta = $this->sunatClient->enviar($comprobante, $facturadorEmision, $payload);
             $paths = $this->guardarArchivos($comprobante, $payload, $respuesta);
             $aceptado = (bool) ($respuesta['ok'] ?? false);
 
