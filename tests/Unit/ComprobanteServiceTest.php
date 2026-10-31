@@ -106,7 +106,7 @@ class ComprobanteServiceTest extends TestCase
 
         $comprobante = (new Comprobante())->forceFill([
             'tipo_documento' => 'F',
-            'serie' => 'F001',
+            'serie' => 'FF001',
             'correlativo' => 3,
             'fecha_emision' => Carbon::parse('2026-09-10'),
             'hora_emision' => '10:00:00',
@@ -124,11 +124,21 @@ class ComprobanteServiceTest extends TestCase
         $payload = $method->invoke($service, $comprobante, $facturador);
         $documento = json_decode($payload['comprobante'], true);
 
-        $this->assertSame('F001', $payload['seriefactura']);
-        $this->assertSame('3', $payload['correlativofactura']);
+        $this->assertSame('001', $payload['seriefactura']);
+        $this->assertSame('00000003', $payload['correlativofactura']);
         $this->assertSame('20678912345', $payload['doc']);
-        $this->assertSame('F001-000003', $documento['numerofactura']);
+        $this->assertSame('F001-00000003', $documento['numerofactura']);
         $this->assertEquals(118.0, $documento['detalles'][0]['precioventaunitarioxitem']);
         $this->assertArrayHasKey('tasaisc', $documento['detalles'][0]);
+    }
+
+    public function test_no_envia_una_serie_con_prefijo_de_otro_tipo(): void
+    {
+        $service = new ComprobanteService(new SunatClient());
+        $method = new ReflectionMethod($service, 'normalizarSerieFacturador');
+        $method->setAccessible(true);
+
+        $this->expectException(ValidationException::class);
+        $method->invoke($service, 'F', 'B002');
     }
 }
