@@ -9,6 +9,16 @@ class CdrInspector
 {
     public static function contieneAceptacion(string $zipBinary, string $serie, int $correlativo): bool
     {
+        return self::contieneDocumento($zipBinary, $serie, $correlativo, true);
+    }
+
+    public static function contieneCdr(string $zipBinary, string $serie, int $correlativo): bool
+    {
+        return self::contieneDocumento($zipBinary, $serie, $correlativo, false);
+    }
+
+    private static function contieneDocumento(string $zipBinary, string $serie, int $correlativo, bool $soloAceptacion): bool
+    {
         if (!class_exists(ZipArchive::class) || !function_exists('simplexml_load_string')) {
             return false;
         }
@@ -52,7 +62,7 @@ class CdrInspector
                     $codigos = $respuesta->xpath('./*[local-name()="ResponseCode"]') ?: [];
                     $referencias = $respuesta->xpath('./*[local-name()="ReferenceID"]') ?: [];
 
-                    if (trim((string) ($codigos[0] ?? '')) !== '0') {
+                    if ($soloAceptacion && trim((string) ($codigos[0] ?? '')) !== '0') {
                         continue;
                     }
 
