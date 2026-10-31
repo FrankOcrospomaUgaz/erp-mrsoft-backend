@@ -71,7 +71,7 @@ class SunatClient
                 json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
             ]);
 
-            return $this->normalizarRespuesta($raw);
+            return $this->normalizarRespuesta($raw, [$rucEmisor, $claveEmisor]);
         } catch (SoapFault $e) {
             return [
                 'ok' => false,
@@ -129,7 +129,7 @@ class SunatClient
                 json_encode($consulta, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
             ]);
 
-            return $this->normalizarRespuesta($raw);
+            return $this->normalizarRespuesta($raw, [$ruc, $clave]);
         } catch (SoapFault $e) {
             return [
                 'ok' => false,
@@ -145,7 +145,7 @@ class SunatClient
         }
     }
 
-    private function normalizarRespuesta(mixed $raw): array
+    private function normalizarRespuesta(mixed $raw, array $secretos = []): array
     {
         if (is_object($raw) && property_exists($raw, 'return')) {
             $raw = $raw->return;
@@ -157,8 +157,8 @@ class SunatClient
                 return [
                     'ok' => false,
                     'code' => 'RESPUESTA_INVALIDA',
-                    'mensaje' => 'El facturador devolvio una respuesta no valida: ' . $raw,
-                    'respuesta_original' => $raw,
+                    'mensaje' => 'El facturador devolvio una respuesta no valida: ' . $this->redactarTexto($raw, $secretos),
+                    'respuesta_original' => $this->redactarTexto($raw, $secretos),
                 ];
             }
             $raw = $decoded;
@@ -169,9 +169,11 @@ class SunatClient
                 'ok' => false,
                 'code' => 'RESPUESTA_VACIA',
                 'mensaje' => 'El facturador no devolvio una respuesta valida.',
-                'respuesta_original' => $raw,
+                'respuesta_original' => $this->redactarValor($raw, $secretos),
             ];
         }
+
+        $raw = $this->redactarValor($raw, $secretos);
 
         $code = $raw['code'] ?? $raw['codigo'] ?? $raw['cod_sunat'] ?? $raw['codsunat'] ?? null;
         $explicitSuccess = $raw['ok'] ?? $raw['success'] ?? $raw['exito'] ?? null;
@@ -203,7 +205,7 @@ class SunatClient
                 $partes[] = "[Código: {$code}]";
             }
 
-            if ((string) $code === '9' || str_contains((string) $mensajeRaw, 'ERROR EN LA CONSULTA')) {
+            if (preg_match('/duplicad|ya\\s+(fue\\s+)?emitid|correlativo.{0,40}(existe|usad|registrad)/iu', (string) $mensajeRaw)) {
                 $partes[] = '- Nota: Si este comprobante ya fue emitido antes con esta serie y correlativo, el facturador no permite duplicarlo (debes usar el siguiente correlativo o descargar el ZIP generado).';
             }
 
@@ -215,6 +217,34 @@ class SunatClient
             'code' => $code ?? ($ok ? 0 : 'ERROR'),
             'mensaje' => $mensaje,
         ]);
+    }
+
+    private function redactarValor(mixed $valor, array $secretos): mixed
+    {
+        if (is_string($valor)) {
+            return $this->redactarTexto($valor, $secretos);
+        }
+
+        if (is_array($valor)) {
+            foreach ($valor as $clave => $contenido) {
+                $valor[$clave] = $this->redactarValor($contenido, $secretos);
+            }
+        }
+
+        return $valor;
+    }
+
+    private function redactarTexto(string $texto, array $secretos): string
+    {
+        usort($secretos, fn ($a, $b) => strlen((string) $b) <=> strlen((string) $a));
+        foreach ($secretos as $secreto) {
+            $secreto = (string) $secreto;
+            if (strlen($secreto) >= 4) {
+                $texto = str_replace($secreto, '[REDACTADO]', $texto);
+            }
+        }
+
+        return $texto;
     }
 
     private function simularRespuesta(Comprobante $comprobante): array
