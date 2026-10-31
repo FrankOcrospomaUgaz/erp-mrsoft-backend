@@ -396,7 +396,9 @@ class ComprobanteService
         $razonSocialLimpia = $this->limpiarTexto($razonSocialResolvida, 100);
         $direccionLimpia = $this->limpiarTexto($direccionResolvida, 100);
 
-        $numero = $comprobante->serie . '-' . str_pad((string) $comprobante->correlativo, 8, '0', STR_PAD_LEFT);
+        $serieNumerica = $this->normalizarSerieFacturador($comprobante->tipo_documento, $comprobante->serie);
+        $prefijoSerie = $comprobante->tipo_documento === 'F' ? 'F' : 'B';
+        $numero = $prefijoSerie . $serieNumerica . '-' . str_pad((string) $comprobante->correlativo, 8, '0', STR_PAD_LEFT);
         $documentoCliente = preg_replace('/\D/', '', (string) ($rucResolvido ?: $contacto?->dni ?: ''));
         $tipoDocumentoCliente = $comprobante->tipo_documento === 'F'
             ? 6
@@ -440,7 +442,7 @@ class ComprobanteService
             'token' => (string) ($facturador->token ?? ''),
             // El facturador agrega la letra del tipo de documento al representar
             // la serie; enviamos solo los tres dígitos para evitar FF002.
-            $serieKey => preg_replace('/^[FB]/', '', $comprobante->serie),
+            $serieKey => $serieNumerica,
             $correlativoKey => str_pad((string) $comprobante->correlativo, 8, '0', STR_PAD_LEFT),
             'doc' => (string) $documentoCliente,
             'nombre' => (string) $razonSocialLimpia,
@@ -448,6 +450,23 @@ class ComprobanteService
             'total' => (float) $comprobante->total,
             'comprobante' => json_encode($documento, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         ];
+    }
+
+    private function normalizarSerieFacturador(string $tipoDocumento, string $serie): string
+    {
+        $prefijo = $tipoDocumento === 'F' ? 'F' : 'B';
+        $serie = strtoupper(trim($serie));
+
+        // En el sobre del facturador el tipo define F/B; el campo de serie debe
+        // contener únicamente los tres dígitos, incluso si el dato trae prefijos repetidos.
+        $serieNumerica = preg_replace('/^' . $prefijo . '+/', '', $serie);
+        if (!is_string($serieNumerica) || !preg_match('/^\d{3}$/', $serieNumerica)) {
+            throw ValidationException::withMessages([
+                'serie' => "La serie para {$tipoDocumento} debe terminar en exactamente tres dígitos y coincidir con su tipo de comprobante.",
+            ]);
+        }
+
+        return $serieNumerica;
     }
 
     private function guardarArchivos(Comprobante $comprobante, array $payload, array $respuesta): array
