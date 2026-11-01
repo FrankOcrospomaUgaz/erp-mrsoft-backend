@@ -153,18 +153,21 @@ class ComprobanteService
                 ]);
             }
 
-            $cliente = Cliente::with('contactos_clientes')->findOrFail($data['cliente_id']);
+            $cliente = !empty($data['cliente_id'])
+                ? Cliente::with('contactos_clientes')->findOrFail($data['cliente_id'])
+                : null;
             $tipoDocumento = $data['tipo_documento'];
+            $receptorDocumento = $data['receptor_documento'] ?? $comprobante->receptor_documento;
             $facturador = $this->resolveFacturador($data['facturador_id'] ?? $comprobante->facturador_id);
             $detalles = $this->normalizarDetalles($data['detalles']);
-            $this->validarCliente($cliente, $tipoDocumento);
+            $this->validarCliente($cliente, $tipoDocumento, $receptorDocumento);
             $totales = $this->calcularTotales($detalles, (float) $facturador->porcentaje_igv);
 
             $comprobante->update([
                 'cliente_id' => $cliente?->id,
-                'receptor_documento' => $cliente ? null : preg_replace('/\D/', '', (string) $data['receptor_documento']),
-                'receptor_nombre' => $cliente ? null : (trim((string) ($data['receptor_nombre'] ?? '')) ?: 'RECEPTOR ' . $data['receptor_documento']),
-                'receptor_direccion' => $cliente ? null : ($data['receptor_direccion'] ?? null),
+                'receptor_documento' => $cliente ? null : preg_replace('/\D/', '', (string) $receptorDocumento),
+                'receptor_nombre' => $cliente ? null : (trim((string) ($data['receptor_nombre'] ?? $comprobante->receptor_nombre)) ?: 'RECEPTOR ' . $receptorDocumento),
+                'receptor_direccion' => $cliente ? null : ($data['receptor_direccion'] ?? $comprobante->receptor_direccion),
                 'facturador_id' => $facturador->id,
                 'tipo_documento' => $tipoDocumento,
                 'serie' => strtoupper($data['serie'] ?? $comprobante->serie),
