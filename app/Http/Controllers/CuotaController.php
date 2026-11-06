@@ -297,7 +297,7 @@ class CuotaController extends Controller
     public function siguienteCorrelativo(Request $request)
     {
         $tipoDocumento = $request->get('tipo_documento', 'F');
-        $serie = strtoupper($request->get('serie', 'F001'));
+        $serie = strtoupper($request->get('serie', 'F010'));
 
         $ultimoCorrelativo = (int) Comprobante::where('tipo_documento', $tipoDocumento)
             ->where('serie', $serie)
@@ -369,7 +369,7 @@ class CuotaController extends Controller
                 );
                 $descripcion = trim((string) $request->input('descripcion', '')) ?: $descripcionPredeterminada;
 
-                $serie = strtoupper($request->get('serie', 'F001'));
+                $serie = strtoupper($request->get('serie', 'F010'));
                 $correlativoSolicitado = $request->filled('correlativo') ? (int) $request->get('correlativo') : null;
                 $fechaEmision = $request->get('fecha_emision') ?: null;
 

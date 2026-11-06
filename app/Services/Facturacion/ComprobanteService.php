@@ -28,7 +28,7 @@ class ComprobanteService
                 : null;
             $this->validarPermisoFacturacion($cliente, $contrato);
             $tipoDocumento = $data['tipo_documento'] ?? 'F';
-            $serie = strtoupper($data['serie'] ?? ($tipoDocumento === 'F' ? 'F001' : 'B001'));
+            $serie = strtoupper($data['serie'] ?? ($tipoDocumento === 'F' ? 'F010' : 'B001'));
             $facturador = $this->resolveFacturador($data['facturador_id'] ?? null);
             $detalles = $this->normalizarDetalles($data['detalles'] ?? []);
             $this->validarCliente($cliente, $tipoDocumento, $data['receptor_documento'] ?? null);

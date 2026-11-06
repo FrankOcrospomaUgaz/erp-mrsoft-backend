@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Middleware\AdminOnly;
+use App\Http\Middleware\VerifySaasSignature;
 
 /*
 |--------------------------------------------------------------------------
@@ -17,6 +18,7 @@ use App\Http\Middleware\AdminOnly;
 */
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/webhooks/kuti', [App\Http\Controllers\KutiWebhookController::class, 'handle']);
+Route::post('/integrations/hotelhub/notices', [App\Http\Controllers\SaasIntegrationController::class, 'notices'])->middleware(VerifySaasSignature::class);
 Route::middleware('auth:sanctum')->get('/authenticate', [AuthController::class, 'authenticate']);
 
 Route::middleware('auth:sanctum')->group(function () {
@@ -47,6 +49,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('productos/{id}/formato-alta/acta-pdf', [App\Http\Controllers\ProductoController::class, 'pdfActaFormatoAlta']);
 
     Route::middleware(AdminOnly::class)->group(function () {
+        Route::get('saas/hotelhub/branches', [App\Http\Controllers\SaasIntegrationController::class, 'branches']);
+        Route::get('saas/hotelhub/alerts', [App\Http\Controllers\SaasIntegrationController::class, 'alerts']);
+        Route::post('saas/hotelhub/branches', [App\Http\Controllers\SaasIntegrationController::class, 'storeBranch']);
+        Route::patch('saas/hotelhub/branches/{branch}/status', [App\Http\Controllers\SaasIntegrationController::class, 'setBranchStatus']);
+        Route::get('saas/payment-notice-settings', [App\Http\Controllers\SaasIntegrationController::class, 'settings']);
+        Route::put('saas/payment-notice-settings', [App\Http\Controllers\SaasIntegrationController::class, 'updateSettings']);
         Route::get('reportes/opciones', [App\Http\Controllers\ReportController::class, 'options']);
         Route::get('reportes/{type}', [App\Http\Controllers\ReportController::class, 'show']);
         Route::get('reportes/{type}/excel', [App\Http\Controllers\ReportController::class, 'excel']);

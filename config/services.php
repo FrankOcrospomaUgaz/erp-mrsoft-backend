@@ -25,6 +25,11 @@ return [
         'token' => env('POSTMARK_TOKEN'),
     ],
 
+    'hotelhub' => [
+        'base_url' => env('HOTELHUB_BASE_URL'),
+        'integration_secret' => env('HOTELHUB_INTEGRATION_SECRET'),
+    ],
+
     'ses' => [
         'key' => env('AWS_ACCESS_KEY_ID'),
         'secret' => env('AWS_SECRET_ACCESS_KEY'),
