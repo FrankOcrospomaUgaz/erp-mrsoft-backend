@@ -25,6 +25,15 @@ class ComprobanteController extends Controller
 
     public function index(Request $request)
     {
+        $dateRules = [
+            'fecha_inicio' => ['nullable', 'date'],
+            'fecha_fin' => ['nullable', 'date'],
+        ];
+        if ($request->filled('fecha_inicio')) {
+            $dateRules['fecha_fin'][] = 'after_or_equal:fecha_inicio';
+        }
+        $request->validate($dateRules);
+
         $search = $request->get('search');
         $perPage = (int) $request->get('per_page', 10);
         $clienteIds = $this->accessibleClienteIds($request);
@@ -32,6 +41,8 @@ class ComprobanteController extends Controller
         $query = Comprobante::with(['cliente.contactos_clientes', 'detalles', 'facturador'])
             ->latest()
             ->when($clienteIds, fn ($query) => $query->whereIn('cliente_id', $clienteIds))
+            ->when($request->filled('fecha_inicio'), fn ($query) => $query->whereDate('fecha_emision', '>=', $request->input('fecha_inicio')))
+            ->when($request->filled('fecha_fin'), fn ($query) => $query->whereDate('fecha_emision', '<=', $request->input('fecha_fin')))
             ->when($search, function ($query, $search) {
                 $query->where(function ($query) use ($search) {
                     $query->where('serie', 'ILIKE', "%{$search}%")
