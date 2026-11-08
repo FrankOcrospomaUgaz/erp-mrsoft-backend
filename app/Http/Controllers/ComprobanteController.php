@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Resources\ComprobanteResource;
 use App\Models\Cliente;
 use App\Models\Comprobante;
+use App\Models\Cuota;
 use App\Models\Facturador;
 use App\Services\Facturacion\ComprobanteService;
 use App\Services\Facturacion\FacturadorSyncService;
@@ -13,6 +14,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 use App\Services\WhatsAppService;
@@ -199,6 +201,55 @@ class ComprobanteController extends Controller
             'status' => 200,
             'message' => 'Factura eliminada correctamente. La cuota se habilito nuevamente.',
         ]);
+    }
+
+    public function asignarCuentaPorCobrar(Request $request, $id)
+    {
+        if ($request->user()?->cliente_id) {
+            return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
+        }
+
+        $validated = $request->validate([
+            'cuota_id' => ['required', 'integer', 'exists:cuotas,id'],
+        ]);
+
+        try {
+            $comprobante = DB::transaction(function () use ($id, $validated) {
+                $comprobante = Comprobante::lockForUpdate()->findOrFail($id);
+                $cuota = Cuota::lockForUpdate()->findOrFail($validated['cuota_id']);
+
+                if ($comprobante->cliente_id) {
+                    abort(422, 'Solo se pueden asignar comprobantes emitidos a clientes externos.');
+                }
+                if ($comprobante->cuota_id) {
+                    abort(422, 'Este comprobante ya está asignado a una cuenta por cobrar.');
+                }
+                if (!in_array($comprobante->estado, ['M', 'T'], true)) {
+                    abort(422, 'Solo se pueden asignar facturas aceptadas por SUNAT.');
+                }
+                if (in_array($cuota->situacion, ['pagado'], true)) {
+                    abort(422, 'No se puede asignar una factura a una cuenta por cobrar pagada.');
+                }
+                if (Comprobante::where('cuota_id', $cuota->id)->exists()) {
+                    abort(422, 'La cuenta por cobrar ya tiene una factura asignada.');
+                }
+
+                $comprobante->update([
+                    'cuota_id' => $cuota->id,
+                    'contrato_id' => $cuota->contrato_id,
+                ]);
+
+                return $comprobante->fresh(['cliente', 'detalles', 'facturador']);
+            });
+
+            return response()->json([
+                'status' => 200,
+                'message' => 'Factura asignada a la cuenta por cobrar.',
+                'data' => new ComprobanteResource($comprobante),
+            ]);
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+            return response()->json(['status' => $e->getStatusCode(), 'message' => $e->getMessage()], $e->getStatusCode());
+        }
     }
 
     public function emisionMasiva(Request $request)
