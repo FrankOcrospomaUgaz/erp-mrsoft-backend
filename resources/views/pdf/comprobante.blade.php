@@ -33,14 +33,15 @@
         .items .sale-value { width: 17%; text-align: right; }
         .summary { position: relative; height: 199px; margin-top: 36px; width: 100%; }
         .amount-words { position: absolute; top: 14px; left: 2px; width: 58%; font-size: 11px; text-transform: uppercase; }
-        .totals { position: absolute; top: 0; right: 22%; width: 18%; border-collapse: collapse; }
+        .totals { position: absolute; top: 0; right: 0; width: 30%; border-collapse: collapse; }
         .totals td { font-size: 11px; line-height: 1.15; padding: 1px 3px; }
         .totals .label { font-weight: bold; width: 56%; }
         .totals .value { width: 44%; text-align: right; white-space: nowrap; }
         .totals .total td { border-top: 1px solid #555; font-size: 11px; font-weight: bold; }
         .footer { margin-top: 0; font-size: 9px; line-height: 1.5; }
-        .footer-number { margin-top: 8px; font-size: 10px; }
+        .footer-number { margin-top: 3px; font-size: 10px; }
         .footer { padding-left: 5px; }
+        .qr-code { display: block; width: 62px; height: 62px; margin-top: 7px; }
     </style>
 </head>
 <body>
@@ -121,6 +122,9 @@
     <div class="footer">
         <div class="footer-note">Representación impresa de la {{ strtolower($tipoDocumento) }}, consulte en https://facturae-garzasoft.com</div>
         <div class="footer-number">{{ $numeroComprobante }}</div>
+        @if ($qrCodeDataUri)
+            <img class="qr-code" src="{{ $qrCodeDataUri }}" alt="Código QR del comprobante">
+        @endif
     </div>
 </main>
 </body>

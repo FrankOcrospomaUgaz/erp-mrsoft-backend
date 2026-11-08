@@ -465,6 +465,43 @@ class ComprobanteController extends Controller
             'D' => 'NOTA DE DÉBITO ELECTRÓNICA',
             default => 'COMPROBANTE ELECTRONICO',
         };
+        $rucEmisor = preg_replace('/\D+/', '', (string) ($facturador?->ruc ?? ''));
+        $documentoReceptor = (string) ($comprobante->receptor_documento ?: $cliente?->ruc ?: $contacto?->dni ?: '');
+        $tipoDocumentoReceptor = strlen(preg_replace('/\D+/', '', $documentoReceptor) ?? '') === 11
+            ? '6'
+            : (strlen(preg_replace('/\D+/', '', $documentoReceptor) ?? '') === 8 ? '1' : '0');
+        $codigoDocumento = match ($comprobante->tipo_documento) {
+            'F' => '01',
+            'B' => '03',
+            'C' => '07',
+            'D' => '08',
+            default => '00',
+        };
+        $qrPayload = implode('|', [
+            $rucEmisor,
+            $codigoDocumento,
+            (string) $comprobante->serie,
+            (string) $comprobante->correlativo,
+            number_format((float) $comprobante->igv, 2, '.', ''),
+            number_format((float) $comprobante->total, 2, '.', ''),
+            optional($comprobante->fecha_emision)->format('Y-m-d'),
+            $tipoDocumentoReceptor,
+            preg_replace('/\D+/', '', $documentoReceptor) ?? '',
+            '',
+        ]);
+        $qrCodeDataUri = null;
+        if ($rucEmisor !== '') {
+            try {
+                $renderer = new \BaconQrCode\Renderer\ImageRenderer(
+                    new \BaconQrCode\Renderer\RendererStyle\RendererStyle(120, 1),
+                    new \BaconQrCode\Renderer\Image\SvgImageBackEnd()
+                );
+                $qrSvg = (new \BaconQrCode\Writer($renderer))->writeString($qrPayload);
+                $qrCodeDataUri = 'data:image/svg+xml;base64,' . base64_encode($qrSvg);
+            } catch (\Throwable $exception) {
+                report($exception);
+            }
+        }
         $pdf = Pdf::loadView('pdf.comprobante', [
             'comprobante' => $comprobante,
             'facturador' => $facturador,
@@ -475,6 +512,7 @@ class ComprobanteController extends Controller
             'monedaSimbolo' => strtoupper((string) $comprobante->moneda) === 'USD' ? '$' : 'S/',
             'formaPago' => $comprobante->forma_pago === 'D' ? 'CREDITO' : 'CONTADO',
             'importeEnLetras' => $this->importeEnLetras($comprobante),
+            'qrCodeDataUri' => $qrCodeDataUri,
         ])->setPaper('a4');
 
         return $pdf->output();
