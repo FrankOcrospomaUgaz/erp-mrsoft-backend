@@ -494,8 +494,12 @@ class ComprobanteController extends Controller
         if (class_exists(\NumberFormatter::class)) {
             $formatter = new \NumberFormatter('es_PE', \NumberFormatter::SPELLOUT);
             $letras = (string) $formatter->format($entero);
-            $letras = preg_replace('/\\buno\\b/u', 'un', $letras) ?: $letras;
+        } else {
+            $letras = $this->numeroEnPalabras($entero);
         }
+        $letras = preg_replace('/veintiuno$/u', 'veintiún', $letras) ?: $letras;
+        $letras = preg_replace('/ y uno$/u', ' y un', $letras) ?: $letras;
+        $letras = preg_replace('/uno$/u', 'un', $letras) ?: $letras;
 
         $moneda = strtoupper((string) $comprobante->moneda) === 'USD' ? 'DÓLARES' : 'SOLES';
         if ($entero === 1) {
@@ -503,6 +507,39 @@ class ComprobanteController extends Controller
         }
 
         return mb_strtoupper(trim($letras) . ' CON ' . str_pad((string) $centimos, 2, '0', STR_PAD_LEFT) . '/100 ' . $moneda, 'UTF-8');
+    }
+
+    private function numeroEnPalabras(int $numero): string
+    {
+        $unidades = [
+            'cero', 'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve',
+            'diez', 'once', 'doce', 'trece', 'catorce', 'quince', 'dieciséis', 'diecisiete',
+            'dieciocho', 'diecinueve', 'veinte', 'veintiuno', 'veintidós', 'veintitrés',
+            'veinticuatro', 'veinticinco', 'veintiséis', 'veintisiete', 'veintiocho', 'veintinueve',
+        ];
+        $decenas = [30 => 'treinta', 40 => 'cuarenta', 50 => 'cincuenta', 60 => 'sesenta', 70 => 'setenta', 80 => 'ochenta', 90 => 'noventa'];
+        $centenas = [200 => 'doscientos', 300 => 'trescientos', 400 => 'cuatrocientos', 500 => 'quinientos', 600 => 'seiscientos', 700 => 'setecientos', 800 => 'ochocientos', 900 => 'novecientos'];
+
+        if ($numero < 30) return $unidades[$numero];
+        if ($numero < 100) {
+            $decena = intdiv($numero, 10) * 10;
+            return $decenas[$decena] . ($numero % 10 ? ' y ' . $unidades[$numero % 10] : '');
+        }
+        if ($numero < 1000) {
+            $centena = intdiv($numero, 100) * 100;
+            if ($numero === 100) return 'cien';
+            $nombre = $centena === 100 ? 'ciento' : $centenas[$centena];
+            return $nombre . ($numero % 100 ? ' ' . $this->numeroEnPalabras($numero % 100) : '');
+        }
+        if ($numero < 1_000_000) {
+            $miles = intdiv($numero, 1000);
+            return ($miles === 1 ? '' : $this->numeroEnPalabras($miles) . ' ') . 'mil'
+                . ($numero % 1000 ? ' ' . $this->numeroEnPalabras($numero % 1000) : '');
+        }
+
+        $millones = intdiv($numero, 1_000_000);
+        return ($millones === 1 ? 'un millón' : $this->numeroEnPalabras($millones) . ' millones')
+            . ($numero % 1_000_000 ? ' ' . $this->numeroEnPalabras($numero % 1_000_000) : '');
     }
 
     public function enviarWhatsApp(Request $request, $id, WhatsAppService $whatsAppService)
