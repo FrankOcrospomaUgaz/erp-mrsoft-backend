@@ -4,22 +4,22 @@
     <meta charset="UTF-8">
     <title>{{ $numeroComprobante }}</title>
     <style>
-        @page { margin: 30px 32px 34px; }
+        @page { margin: 22px 42px 28px; }
         * { box-sizing: border-box; }
-        body { color: #111; font-family: Arial, DejaVu Sans, sans-serif; font-size: 10px; }
+        body { color: #111; font-family: Arial, DejaVu Sans, sans-serif; font-size: 11px; }
         table { border-collapse: collapse; }
-        .header { width: 100%; height: 135px; }
-        .issuer { width: 65%; vertical-align: bottom; padding: 0 18px 23px 18px; }
-        .issuer-name { font-size: 17px; font-weight: bold; margin-bottom: 5px; }
-        .issuer-address { font-size: 12px; line-height: 1.4; }
-        .document-box { width: 35%; height: 90px; border: 1px solid #111; text-align: center; vertical-align: middle; padding: 8px; }
-        .document-title { font-size: 20px; line-height: 1.05; font-weight: bold; margin: 0 0 5px; text-transform: uppercase; }
-        .document-ruc, .document-number { font-size: 15px; line-height: 1.35; }
-        .buyer-box { width: 100%; border: 1px solid #111; margin: 2px 0 10px; padding: 9px 13px; }
-        .buyer-box td { font-size: 11px; line-height: 1.45; vertical-align: top; }
+        .header { width: 100%; height: 132px; }
+        .issuer { width: 65%; vertical-align: top; padding: 68px 8px 0 8px; }
+        .issuer-name { font-size: 18px; font-weight: bold; margin-bottom: 7px; }
+        .issuer-address { font-size: 13px; line-height: 1.45; }
+        .document-box { width: 35%; height: 105px; border: 1px solid #111; text-align: center; vertical-align: middle; padding: 10px; }
+        .document-title { font-size: 22px; line-height: 1.1; font-weight: bold; margin: 0 0 9px; text-transform: uppercase; }
+        .document-ruc, .document-number { font-size: 16px; line-height: 1.5; }
+        .buyer-box { width: 100%; border: 1px solid #111; margin: 0 0 14px; padding: 8px 13px; }
+        .buyer-box td { font-size: 11px; line-height: 1.4; vertical-align: top; }
         .buyer-label { width: 22%; font-weight: bold; white-space: nowrap; padding-right: 10px; }
         .buyer-value { width: 78%; }
-        .items { width: 100%; table-layout: fixed; }
+        .items { width: 100%; table-layout: fixed; margin-top: 18px; }
         .items th, .items td { border: 1px solid #111; padding: 5px 4px; font-size: 9px; }
         .items th { text-align: center; font-weight: bold; height: 23px; }
         .items td { vertical-align: middle; }
@@ -31,18 +31,15 @@
         .items .price { width: 8%; text-align: right; }
         .items .discount { width: 8%; text-align: right; }
         .items .sale-value { width: 17%; text-align: right; }
-        .bottom { width: 100%; margin-top: 45px; }
-        .bottom td { vertical-align: top; }
-        .amount-words { width: 60%; font-size: 10px; padding: 15px 0 0 2px; text-transform: uppercase; }
-        .totals { width: 40%; }
-        .totals td { font-size: 10px; padding: 2px 4px; }
-        .totals .label { font-weight: bold; width: 65%; }
-        .totals .value { width: 35%; text-align: right; }
+        .summary { position: relative; height: 190px; margin-top: 36px; width: 100%; }
+        .amount-words { position: absolute; top: 14px; left: 2px; width: 58%; font-size: 11px; text-transform: uppercase; }
+        .totals { position: absolute; top: 0; right: 22%; width: 18%; border-collapse: collapse; }
+        .totals td { font-size: 11px; line-height: 1.45; padding: 2px 4px; }
+        .totals .label { font-weight: bold; width: 56%; }
+        .totals .value { width: 44%; text-align: right; white-space: nowrap; }
         .totals .total td { border-top: 1px solid #555; font-size: 11px; font-weight: bold; }
-        .footer { margin-top: 32px; font-size: 8px; line-height: 1.45; }
-        .footer-note { margin-bottom: 12px; }
-        .qr-image { width: 78px; height: 78px; margin: 4px 0 3px; }
-        .qr-caption { font-size: 9px; }
+        .footer { margin-top: 0; font-size: 9px; line-height: 1.5; }
+        .footer-number { margin-top: 16px; font-size: 10px; }
     </style>
 </head>
 <body>
@@ -109,27 +106,20 @@
         </tbody>
     </table>
 
-    <table class="bottom">
-        <tr>
-            <td class="amount-words">SON: {{ $importeEnLetras }}</td>
-            <td>
-                <table class="totals">
-                    <tr><td class="label">Op. Gravada:</td><td class="value">{{ number_format((float) $gravada, 2) }}</td></tr>
-                    <tr><td class="label">I.G.V.:</td><td class="value">{{ number_format((float) $comprobante->igv, 2) }}</td></tr>
-                    <tr><td class="label">Op. Inafecta:</td><td class="value">{{ number_format((float) $inafecta, 2) }}</td></tr>
-                    <tr><td class="label">Op. Exonerada:</td><td class="value">{{ number_format((float) $exonerada, 2) }}</td></tr>
-                    <tr class="total"><td class="label">Importe Total</td><td class="value">{{ number_format((float) $comprobante->total, 2) }}</td></tr>
-                </table>
-            </td>
-        </tr>
-    </table>
+    <div class="summary">
+        <div class="amount-words">SON: {{ $importeEnLetras }}</div>
+        <table class="totals">
+            <tr><td class="label">Op. Gravada:</td><td class="value">{{ number_format((float) $gravada, 2) }}</td></tr>
+            <tr><td class="label">I.G.V.:</td><td class="value">{{ number_format((float) $comprobante->igv, 2) }}</td></tr>
+            <tr><td class="label">Op. Inafecta:</td><td class="value">{{ number_format((float) $inafecta, 2) }}</td></tr>
+            <tr><td class="label">Op. Exonerada:</td><td class="value">{{ number_format((float) $exonerada, 2) }}</td></tr>
+            <tr class="total"><td class="label">Importe Total</td><td class="value">{{ number_format((float) $comprobante->total, 2) }}</td></tr>
+        </table>
+    </div>
 
     <div class="footer">
         <div class="footer-note">Representación impresa de la {{ strtolower($tipoDocumento) }}, consulte en https://facturae-garzasoft.com</div>
-        @if ($qrCodeDataUri)
-            <img class="qr-image" src="{{ $qrCodeDataUri }}" alt="Código QR de consulta del comprobante">
-        @endif
-        <div class="qr-caption">{{ $numeroComprobante }}</div>
+        <div class="footer-number">{{ $numeroComprobante }}</div>
     </div>
 </main>
 </body>
