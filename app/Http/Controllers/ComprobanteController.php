@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Resources\ComprobanteResource;
+use App\Http\Resources\CuotaResource;
 use App\Models\Cliente;
 use App\Models\Comprobante;
 use App\Models\Cuota;
@@ -227,8 +228,12 @@ class ComprobanteController extends Controller
                 if (!in_array($comprobante->estado, ['M', 'T'], true)) {
                     abort(422, 'Solo se pueden asignar facturas aceptadas por SUNAT.');
                 }
-                if (in_array($cuota->situacion, ['pagado'], true)) {
-                    abort(422, 'No se puede asignar una factura a una cuenta por cobrar pagada.');
+                if (!in_array($cuota->situacion, ['pendiente', 'vencido'], true)) {
+                    abort(422, 'Solo se pueden usar cuentas por cobrar pendientes o vencidas.');
+                }
+                $montoPagado = (float) $cuota->pagos_cuota()->where('estado_revision', 'aprobado')->sum('monto_pagado');
+                if ($montoPagado >= (float) $cuota->monto) {
+                    abort(422, 'No se puede asignar una factura a una cuenta por cobrar sin saldo pendiente.');
                 }
                 if (Comprobante::where('cuota_id', $cuota->id)->exists()) {
                     abort(422, 'La cuenta por cobrar ya tiene una factura asignada.');
@@ -250,6 +255,67 @@ class ComprobanteController extends Controller
         } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
             return response()->json(['status' => $e->getStatusCode(), 'message' => $e->getMessage()], $e->getStatusCode());
         }
+    }
+
+    public function cuentasPorCobrarDisponibles(Request $request, $id)
+    {
+        if ($request->user()?->cliente_id) {
+            return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
+        }
+
+        $comprobante = Comprobante::findOrFail($id);
+        if ($comprobante->cliente_id || $comprobante->cuota_id || !in_array($comprobante->estado, ['M', 'T'], true)) {
+            return response()->json(['status' => 422, 'message' => 'La factura no está disponible para asignar a una cuenta por cobrar.'], 422);
+        }
+
+        $search = trim((string) $request->input('search', ''));
+        $query = Cuota::with([
+            'contrato.cliente.parent_cliente.parent_cliente',
+            'contrato.contratoProductoModulos.producto',
+            'contrato.contratoProductoModulos.modulo',
+            'pagos_cuota',
+            'comprobante.cliente',
+            'comprobante.detalles',
+            'comprobante.facturador',
+        ])
+            ->whereIn('situacion', ['pendiente', 'vencido'])
+            ->whereDoesntHave('comprobante')
+            ->whereRaw("cuotas.monto > COALESCE((SELECT SUM(pagos_cuota.monto_pagado) FROM pagos_cuota WHERE pagos_cuota.cuota_id = cuotas.id AND pagos_cuota.deleted_at IS NULL AND pagos_cuota.estado_revision = ?), 0)", ['aprobado'])
+            ->when($search !== '', function ($query) use ($search) {
+                $like = "%{$search}%";
+                $query->whereHas('contrato', function ($contrato) use ($like) {
+                    $contrato->where('numero', 'ILIKE', $like)
+                        ->orWhereHas('cliente', function ($cliente) use ($like) {
+                            $match = function ($clientQuery) use ($like) {
+                                $clientQuery->where('ruc', 'ILIKE', $like)
+                                    ->orWhere('razon_social', 'ILIKE', $like)
+                                    ->orWhere('nombre_comercial', 'ILIKE', $like);
+                            };
+                            $cliente->where($match)
+                                ->orWhereHas('parent_cliente', $match)
+                                ->orWhereHas('parent_cliente.parent_cliente', $match);
+                        });
+                });
+            })
+            ->orderBy('fecha_vencimiento');
+
+        $cuotas = $query->paginate(min(max((int) $request->input('per_page', 20), 1), 100));
+
+        return response()->json([
+            'data' => CuotaResource::collection($cuotas->items()),
+            'links' => [
+                'first' => $cuotas->url(1),
+                'last' => $cuotas->url($cuotas->lastPage()),
+                'prev' => $cuotas->previousPageUrl(),
+                'next' => $cuotas->nextPageUrl(),
+            ],
+            'meta' => [
+                'current_page' => $cuotas->currentPage(),
+                'last_page' => $cuotas->lastPage(),
+                'per_page' => $cuotas->perPage(),
+                'total' => $cuotas->total(),
+            ],
+        ]);
     }
 
     public function emisionMasiva(Request $request)
