@@ -11,6 +11,10 @@ use App\Models\Facturador;
 use App\Services\Facturacion\ComprobanteService;
 use App\Services\Facturacion\FacturadorSyncService;
 use Barryvdh\DomPDF\Facade\Pdf;
+use BaconQrCode\Renderer\Image\SvgImageBackEnd;
+use BaconQrCode\Renderer\ImageRenderer;
+use BaconQrCode\Renderer\RendererStyle\RendererStyle;
+use BaconQrCode\Writer;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -43,7 +47,10 @@ class ComprobanteController extends Controller
 
         $query = Comprobante::with(['cliente.contactos_clientes', 'detalles', 'facturador'])
             ->latest()
-            ->when($clienteIds, fn ($query) => $query->whereIn('cliente_id', $clienteIds))
+            ->when($clienteIds, fn ($query) => $query->where(function ($scope) use ($clienteIds) {
+                $scope->whereIn('cliente_id', $clienteIds)
+                    ->orWhereHas('cuota.contrato', fn ($contrato) => $contrato->whereIn('cliente_id', $clienteIds));
+            }))
             ->when($request->filled('fecha_inicio'), fn ($query) => $query->whereDate('fecha_emision', '>=', $request->input('fecha_inicio')))
             ->when($request->filled('fecha_fin'), fn ($query) => $query->whereDate('fecha_emision', '<=', $request->input('fecha_fin')))
             ->when($search, function ($query, $search) {
@@ -456,12 +463,34 @@ class ComprobanteController extends Controller
         $cliente = $comprobante->cliente;
         $contacto = $cliente?->contactos_clientes?->first();
         $tipoDocumento = match ($comprobante->tipo_documento) {
-            'F' => 'FACTURA DE VENTA ELECTRONICA',
-            'B' => 'BOLETA DE VENTA ELECTRONICA',
-            'C' => 'NOTA DE CREDITO ELECTRONICA',
-            'D' => 'NOTA DE DEBITO ELECTRONICA',
+            'F' => 'FACTURA ELECTRÓNICA',
+            'B' => 'BOLETA DE VENTA ELECTRÓNICA',
+            'C' => 'NOTA DE CRÉDITO ELECTRÓNICA',
+            'D' => 'NOTA DE DÉBITO ELECTRÓNICA',
             default => 'COMPROBANTE ELECTRONICO',
         };
+        $documentoReceptor = $cliente?->ruc ?: $comprobante->receptor_documento ?: $contacto?->dni ?: '';
+        $tipoDocumentoReceptor = strlen(preg_replace('/\D/', '', (string) $documentoReceptor)) === 11 ? '6' : '1';
+        $qrPayload = implode('|', [
+            (string) ($facturador?->ruc ?: ''),
+            $comprobante->tipo_documento === 'F' ? '01' : '03',
+            $comprobante->serie,
+            (string) $comprobante->correlativo,
+            number_format((float) $comprobante->igv, 2, '.', ''),
+            number_format((float) $comprobante->total, 2, '.', ''),
+            optional($comprobante->fecha_emision)->format('Y-m-d'),
+            $tipoDocumentoReceptor,
+            (string) $documentoReceptor,
+            '',
+        ]);
+        $qrCodeDataUri = null;
+        try {
+            $renderer = new ImageRenderer(new RendererStyle(160, 1), new SvgImageBackEnd());
+            $qrSvg = (new Writer($renderer))->writeString($qrPayload);
+            $qrCodeDataUri = 'data:image/svg+xml;base64,' . base64_encode($qrSvg);
+        } catch (\Throwable) {
+            // La representación se conserva aunque no se pueda generar el QR.
+        }
 
         $pdf = Pdf::loadView('pdf.comprobante', [
             'comprobante' => $comprobante,
@@ -472,9 +501,36 @@ class ComprobanteController extends Controller
             'numeroComprobante' => $comprobante->serie . '-' . str_pad((string) $comprobante->correlativo, 8, '0', STR_PAD_LEFT),
             'monedaSimbolo' => strtoupper((string) $comprobante->moneda) === 'USD' ? '$' : 'S/',
             'formaPago' => $comprobante->forma_pago === 'D' ? 'CREDITO' : 'CONTADO',
+            'importeEnLetras' => $this->importeEnLetras($comprobante),
+            'qrCodeDataUri' => $qrCodeDataUri,
         ])->setPaper('a4');
 
         return $pdf->output();
+    }
+
+    private function importeEnLetras(Comprobante $comprobante): string
+    {
+        $total = round((float) $comprobante->total, 2);
+        $entero = (int) floor($total);
+        $centimos = (int) round(($total - $entero) * 100);
+        if ($centimos === 100) {
+            $entero++;
+            $centimos = 0;
+        }
+
+        $letras = (string) $entero;
+        if (class_exists(\NumberFormatter::class)) {
+            $formatter = new \NumberFormatter('es_PE', \NumberFormatter::SPELLOUT);
+            $letras = (string) $formatter->format($entero);
+            $letras = preg_replace('/\\buno\\b/u', 'un', $letras) ?: $letras;
+        }
+
+        $moneda = strtoupper((string) $comprobante->moneda) === 'USD' ? 'DÓLARES' : 'SOLES';
+        if ($entero === 1) {
+            $moneda = strtoupper((string) $comprobante->moneda) === 'USD' ? 'DÓLAR' : 'SOL';
+        }
+
+        return mb_strtoupper(trim($letras) . ' CON ' . str_pad((string) $centimos, 2, '0', STR_PAD_LEFT) . '/100 ' . $moneda, 'UTF-8');
     }
 
     public function enviarWhatsApp(Request $request, $id, WhatsAppService $whatsAppService)
@@ -720,7 +776,14 @@ class ComprobanteController extends Controller
     {
         $clienteIds = $this->accessibleClienteIds($request);
 
-        return !$clienteIds || in_array((int) $comprobante->cliente_id, $clienteIds, true);
+        if (!$clienteIds || in_array((int) $comprobante->cliente_id, $clienteIds, true)) {
+            return true;
+        }
+
+        return $comprobante->cuota_id !== null
+            && Cuota::whereKey($comprobante->cuota_id)
+                ->whereHas('contrato', fn ($contrato) => $contrato->whereIn('cliente_id', $clienteIds))
+                ->exists();
     }
 
     private function accessibleClienteIds(Request $request): array
