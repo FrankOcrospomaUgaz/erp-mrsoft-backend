@@ -222,9 +222,6 @@ class ComprobanteController extends Controller
                 $comprobante = Comprobante::lockForUpdate()->findOrFail($id);
                 $cuota = Cuota::with('contrato')->lockForUpdate()->findOrFail($validated['cuota_id']);
 
-                if ($comprobante->cuota_id) {
-                    abort(422, 'Este comprobante ya está asignado a una cuenta por cobrar.');
-                }
                 if (!in_array($comprobante->estado, ['M', 'T'], true)) {
                     abort(422, 'Solo se pueden asignar facturas aceptadas por SUNAT.');
                 }
@@ -267,7 +264,7 @@ class ComprobanteController extends Controller
         }
 
         $comprobante = Comprobante::findOrFail($id);
-        if ($comprobante->cuota_id || !in_array($comprobante->estado, ['M', 'T'], true)) {
+        if (!in_array($comprobante->estado, ['M', 'T'], true)) {
             return response()->json(['status' => 422, 'message' => 'La factura no está disponible para asignar a una cuenta por cobrar.'], 422);
         }
 
@@ -283,6 +280,7 @@ class ComprobanteController extends Controller
         ])
             ->whereIn('situacion', ['pendiente', 'vencido'])
             ->whereDoesntHave('comprobante')
+            ->when($comprobante->cuota_id, fn ($query) => $query->whereKeyNot($comprobante->cuota_id))
             ->when($comprobante->cliente_id, fn ($query) => $query->whereHas('contrato', fn ($contrato) => $contrato->where('cliente_id', $comprobante->cliente_id)))
             ->whereRaw("cuotas.monto > COALESCE((SELECT SUM(pagos_cuota.monto_pagado) FROM pagos_cuota WHERE pagos_cuota.cuota_id = cuotas.id AND pagos_cuota.deleted_at IS NULL AND pagos_cuota.estado_revision = ?), 0)", ['aprobado'])
             ->when($search !== '', function ($query) use ($search) {
