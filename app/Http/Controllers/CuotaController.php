@@ -6,6 +6,7 @@ use App\Http\Resources\ComprobanteResource;
 use App\Models\Comprobante;
 use App\Models\Cuota;
 use App\Models\Cliente;
+use App\Models\Facturador;
 use App\Services\Facturacion\ComprobanteService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
