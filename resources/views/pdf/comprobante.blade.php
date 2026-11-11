@@ -8,11 +8,13 @@
         * { box-sizing: border-box; }
         body { color: #111; font-family: Arial, DejaVu Sans, sans-serif; font-size: 11px; }
         table { border-collapse: collapse; }
-        .header { width: 100%; height: 132px; }
-        .issuer { width: 65%; vertical-align: top; padding: 68px 8px 0 8px; }
+        .header { width: 100%; height: 240px; }
+        .issuer { width: 65%; vertical-align: top; padding: 8px 8px 0 8px; }
+        .issuer-logo { display: block; width: 290px; height: 153px; object-fit: contain; object-position: left center; margin: 0 0 8px; }
         .issuer-name { font-size: 18px; font-weight: bold; margin-bottom: 7px; }
         .issuer-address { font-size: 13px; line-height: 1.45; }
-        .document-box { position: relative; top: 16px; width: 35%; height: 64px; border: 1px solid #111; text-align: center; vertical-align: middle; padding: 8px; }
+        .document-cell { width: 35%; vertical-align: top; padding: 0 0 0 8px; }
+        .document-box { width: 100%; height: 100px; border: 1px solid #111; text-align: center; padding: 8px; }
         .document-title { font-size: 18px; line-height: 1.05; font-weight: bold; margin: 0 0 6px; text-transform: uppercase; }
         .document-ruc, .document-number { font-size: 14px; line-height: 1.35; }
         .buyer-box { width: 100%; border: 1px solid #111; margin: 0 0 8px; padding: 7px 13px; }
@@ -39,9 +41,9 @@
         .totals .value { width: 44%; text-align: right; white-space: nowrap; }
         .totals .total td { border-top: 1px solid #555; font-size: 11px; font-weight: bold; }
         .footer { margin-top: 0; font-size: 9px; line-height: 1.5; }
-        .footer-number { margin-top: 3px; font-size: 10px; }
+        .footer-number { margin-top: 7px; font-size: 10px; }
         .footer { padding-left: 5px; }
-        .qr-code { display: block; width: 62px; height: 62px; margin-top: 7px; }
+        .qr-code { display: block; width: 80px; height: 80px; margin-top: 7px; }
     </style>
 </head>
 <body>
@@ -55,13 +57,18 @@
     <table class="header">
         <tr>
             <td class="issuer">
+                @if ($logoDataUri)
+                    <img class="issuer-logo" src="{{ $logoDataUri }}" alt="Garzasoft">
+                @endif
                 <div class="issuer-name">{{ $facturador?->razon_social ?: ($facturador?->nombre_comercial ?: 'GARZASOFT E.I.R.L.') }}</div>
                 <div class="issuer-address">{{ $facturador?->direccion ?: '-' }}</div>
             </td>
-            <td class="document-box">
-                <div class="document-title">{{ $tipoDocumento }}</div>
-                <div class="document-ruc">RUC: {{ $facturador?->ruc ?: '-' }}</div>
-                <div class="document-number">{{ $numeroComprobante }}</div>
+            <td class="document-cell">
+                <div class="document-box">
+                    <div class="document-title">{{ $tipoDocumento }}</div>
+                    <div class="document-ruc">RUC: {{ $facturador?->ruc ?: '-' }}</div>
+                    <div class="document-number">{{ $numeroComprobante }}</div>
+                </div>
             </td>
         </tr>
     </table>
@@ -121,10 +128,10 @@
 
     <div class="footer">
         <div class="footer-note">Representación impresa de la {{ strtolower($tipoDocumento) }}, consulte en https://facturae-garzasoft.com</div>
-        <div class="footer-number">{{ $numeroComprobante }}</div>
         @if ($qrCodeDataUri)
             <img class="qr-code" src="{{ $qrCodeDataUri }}" alt="Código QR del comprobante">
         @endif
+        <div class="footer-number">{{ $numeroComprobante }}</div>
     </div>
 </main>
 </body>
