@@ -425,10 +425,20 @@ class CuotaController extends Controller
     private function generarFacturaManual(Request $request, Cuota $cuota)
     {
         $validator = Validator::make($request->all(), [
-            'serie' => 'required|string|size:4|regex:/^F\d{3}$/',
+            'serie' => 'required|string|size:4|regex:/^[FB]\d{3}$/i',
             'correlativo' => 'required|integer|min:1',
             'fecha_emision' => 'nullable|date',
             'monto_total' => 'nullable|numeric|min:0',
+            'tipo_documento' => 'nullable|in:F,B',
+            'moneda' => 'nullable|string|in:PEN,USD,EUR',
+            'forma_pago' => 'nullable|in:C,D',
+            'subtotal' => 'nullable|numeric|min:0',
+            'igv' => 'nullable|numeric|min:0',
+            'receptor_documento' => 'nullable|string|max:20',
+            'receptor_nombre' => 'nullable|string|max:255',
+            'receptor_direccion' => 'nullable|string|max:255',
+            'detalles' => 'nullable|string',
+            'metadata_pdf' => 'nullable|string',
             'pdf_file' => 'nullable|file|mimes:pdf|max:10240',
         ]);
 
@@ -454,6 +464,17 @@ class CuotaController extends Controller
                 $correlativo = (int) $request->get('correlativo');
                 $fechaEmision = $request->get('fecha_emision') ?: now()->toDateString();
                 $total = (float) ($request->get('monto_total') ?: $cuota->monto);
+                $tipoDocumento = strtoupper((string) $request->get('tipo_documento', str_starts_with($serie, 'B') ? 'B' : 'F'));
+                $detalles = $request->filled('detalles') ? json_decode($request->get('detalles'), true) : [];
+                $metadata = $request->filled('metadata_pdf') ? json_decode($request->get('metadata_pdf'), true) : [];
+                if (!is_array($detalles) || !is_array($metadata)) {
+                    throw new \InvalidArgumentException('Los datos extraídos del PDF no tienen un formato válido.');
+                }
+                foreach ($detalles as $detalle) {
+                    if (!is_array($detalle) || trim((string) ($detalle['descripcion'] ?? '')) === '') {
+                        throw new \InvalidArgumentException('El PDF contiene un concepto sin descripción válida.');
+                    }
+                }
 
                 $facturador = Facturador::where('activo', true)->first() ?? Facturador::latest()->first();
 
@@ -464,19 +485,26 @@ class CuotaController extends Controller
                     $pdfPath = $file->storeAs('facturas_manuales', $filename, 'local');
                 }
 
-                $subtotal = round($total / 1.18, 2);
-                $igv = round($total - $subtotal, 2);
+                $subtotal = $request->filled('subtotal')
+                    ? (float) $request->get('subtotal')
+                    : round($total / 1.18, 2);
+                $igv = $request->filled('igv')
+                    ? (float) $request->get('igv')
+                    : round($total - $subtotal, 2);
 
                 $comprobante = Comprobante::create([
                     'cliente_id' => $contrato->cliente_id,
+                    'receptor_documento' => $request->get('receptor_documento') ?: $contrato->cliente?->ruc,
+                    'receptor_nombre' => $request->get('receptor_nombre') ?: ($contrato->cliente?->razon_social ?: $contrato->cliente?->nombre_comercial),
+                    'receptor_direccion' => $request->get('receptor_direccion') ?: $contrato->cliente?->direccion,
                     'contrato_id' => $contrato->id,
                     'cuota_id' => $cuota->id,
                     'facturador_id' => $facturador?->id,
-                    'tipo_documento' => 'F',
+                    'tipo_documento' => $tipoDocumento,
                     'serie' => $serie,
                     'correlativo' => $correlativo,
-                    'moneda' => 'PEN',
-                    'forma_pago' => 'C',
+                    'moneda' => $request->get('moneda', 'PEN'),
+                    'forma_pago' => $request->get('forma_pago', 'C'),
                     'fecha_emision' => $fechaEmision,
                     'hora_emision' => now()->format('H:i:s'),
                     'subtotal' => $subtotal,
@@ -484,18 +512,34 @@ class CuotaController extends Controller
                     'total' => $total,
                     'estado' => 'M', // 'M' = Manual / Registrado
                     'pdf_path' => $pdfPath,
+                    'payload' => ['pdf_metadata' => $metadata],
                 ]);
 
-                $comprobante->detalles()->create([
-                    'descripcion' => sprintf('Factura manual cuota contrato %s', $contrato->numero),
-                    'cantidad' => 1,
-                    'precio_unitario' => $total,
-                    'subtotal' => $subtotal,
-                    'igv' => $igv,
-                    'total' => $total,
-                    'tipo_igv' => '10',
-                    'unidad' => 'NIU',
-                ]);
+                if (count($detalles)) {
+                    foreach ($detalles as $detalle) {
+                        $comprobante->detalles()->create([
+                            'descripcion' => mb_substr(trim((string) $detalle['descripcion']), 0, 255),
+                            'cantidad' => max(0.01, (float) ($detalle['cantidad'] ?? 1)),
+                            'precio_unitario' => max(0, (float) ($detalle['precio_unitario'] ?? $detalle['valor_unitario'] ?? 0)),
+                            'subtotal' => max(0, (float) ($detalle['subtotal'] ?? 0)),
+                            'igv' => max(0, (float) ($detalle['igv'] ?? 0)),
+                            'total' => max(0, (float) ($detalle['total'] ?? 0)),
+                            'tipo_igv' => in_array((string) ($detalle['tipo_igv'] ?? '10'), ['10', '20', '30', '40'], true) ? (string) ($detalle['tipo_igv'] ?? '10') : '10',
+                            'unidad' => mb_substr((string) ($detalle['unidad'] ?? 'NIU'), 0, 8),
+                        ]);
+                    }
+                } else {
+                    $comprobante->detalles()->create([
+                        'descripcion' => sprintf('Factura manual cuota contrato %s', $contrato->numero),
+                        'cantidad' => 1,
+                        'precio_unitario' => $total,
+                        'subtotal' => $subtotal,
+                        'igv' => $igv,
+                        'total' => $total,
+                        'tipo_igv' => '10',
+                        'unidad' => 'NIU',
+                    ]);
+                }
 
                 return $comprobante;
             });
