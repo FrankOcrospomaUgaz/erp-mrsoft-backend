@@ -220,11 +220,8 @@ class ComprobanteController extends Controller
         try {
             $comprobante = DB::transaction(function () use ($id, $validated) {
                 $comprobante = Comprobante::lockForUpdate()->findOrFail($id);
-                $cuota = Cuota::lockForUpdate()->findOrFail($validated['cuota_id']);
+                $cuota = Cuota::with('contrato')->lockForUpdate()->findOrFail($validated['cuota_id']);
 
-                if ($comprobante->cliente_id) {
-                    abort(422, 'Solo se pueden asignar comprobantes emitidos a clientes externos.');
-                }
                 if ($comprobante->cuota_id) {
                     abort(422, 'Este comprobante ya está asignado a una cuenta por cobrar.');
                 }
@@ -240,6 +237,9 @@ class ComprobanteController extends Controller
                 }
                 if (Comprobante::where('cuota_id', $cuota->id)->exists()) {
                     abort(422, 'La cuenta por cobrar ya tiene una factura asignada.');
+                }
+                if ($comprobante->cliente_id && (int) $cuota->contrato?->cliente_id !== (int) $comprobante->cliente_id) {
+                    abort(422, 'La cuenta por cobrar seleccionada pertenece a otro cliente.');
                 }
 
                 $comprobante->update([
@@ -267,7 +267,7 @@ class ComprobanteController extends Controller
         }
 
         $comprobante = Comprobante::findOrFail($id);
-        if ($comprobante->cliente_id || $comprobante->cuota_id || !in_array($comprobante->estado, ['M', 'T'], true)) {
+        if ($comprobante->cuota_id || !in_array($comprobante->estado, ['M', 'T'], true)) {
             return response()->json(['status' => 422, 'message' => 'La factura no está disponible para asignar a una cuenta por cobrar.'], 422);
         }
 
@@ -283,6 +283,7 @@ class ComprobanteController extends Controller
         ])
             ->whereIn('situacion', ['pendiente', 'vencido'])
             ->whereDoesntHave('comprobante')
+            ->when($comprobante->cliente_id, fn ($query) => $query->whereHas('contrato', fn ($contrato) => $contrato->where('cliente_id', $comprobante->cliente_id)))
             ->whereRaw("cuotas.monto > COALESCE((SELECT SUM(pagos_cuota.monto_pagado) FROM pagos_cuota WHERE pagos_cuota.cuota_id = cuotas.id AND pagos_cuota.deleted_at IS NULL AND pagos_cuota.estado_revision = ?), 0)", ['aprobado'])
             ->when($search !== '', function ($query) use ($search) {
                 $like = "%{$search}%";
