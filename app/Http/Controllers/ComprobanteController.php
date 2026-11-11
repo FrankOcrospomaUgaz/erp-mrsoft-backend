@@ -491,14 +491,19 @@ class ComprobanteController extends Controller
         $qrCodeDataUri = null;
         if ($rucEmisor !== '') {
             try {
-                $renderer = new \BaconQrCode\Renderer\ImageRenderer(
-                    new \BaconQrCode\Renderer\RendererStyle\RendererStyle(120, 1),
-                    new \BaconQrCode\Renderer\Image\SvgImageBackEnd()
-                );
-                $qrSvg = (new \BaconQrCode\Writer($renderer))->writeString($qrPayload);
-                $qrCodeDataUri = 'data:image/svg+xml;base64,' . base64_encode($qrSvg);
+                $renderer = new \BaconQrCode\Renderer\GDLibRenderer(160, 1, 'png');
+                $qrPng = (new \BaconQrCode\Writer($renderer))->writeString($qrPayload);
+                $qrCodeDataUri = 'data:image/png;base64,' . base64_encode($qrPng);
             } catch (\Throwable $exception) {
                 report($exception);
+            }
+        }
+        $logoDataUri = null;
+        $logoPath = public_path('img/logo.png');
+        if (is_file($logoPath)) {
+            $logoContents = file_get_contents($logoPath);
+            if ($logoContents !== false) {
+                $logoDataUri = 'data:image/png;base64,' . base64_encode($logoContents);
             }
         }
         $pdf = Pdf::loadView('pdf.comprobante', [
@@ -512,6 +517,7 @@ class ComprobanteController extends Controller
             'formaPago' => $comprobante->forma_pago === 'D' ? 'CREDITO' : 'CONTADO',
             'importeEnLetras' => $this->importeEnLetras($comprobante),
             'qrCodeDataUri' => $qrCodeDataUri,
+            'logoDataUri' => $logoDataUri,
         ])->setPaper('a4');
 
         return $pdf->output();
