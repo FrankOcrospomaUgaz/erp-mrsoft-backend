@@ -40,7 +40,8 @@ class Usuario extends Model
 	];
 
 	protected $hidden = [
-		'password'
+		'password',
+		'password_encrypted',
 	];
 
 	protected $fillable = [
@@ -49,6 +50,7 @@ class Usuario extends Model
 		'apellidos',
 		'usuario',
 		'password',
+		'password_encrypted',
 		'password_changed_at',
 		'tipo_usuario_id'
 	];

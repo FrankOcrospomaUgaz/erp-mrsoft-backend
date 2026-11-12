@@ -12,6 +12,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Log;
@@ -382,6 +383,8 @@ class ClienteController extends Controller
             ->latest()
             ->first();
 
+        $recipient = $this->portalEmail($cliente->load('contactos_clientes'));
+
         return response()->json([
             'status' => 200,
             'data' => [
@@ -396,7 +399,13 @@ class ClienteController extends Controller
                     'deleted_at' => $usuario->deleted_at,
                 ] : null,
                 'password_visible' => null,
-                'password_message' => 'La contraseña actual no se puede ver porque esta guardada encriptada. Puedes definir una nueva.',
+                'recipient' => $recipient,
+                'has_recoverable_password' => (bool) $usuario?->password_encrypted,
+                'password_message' => !$usuario
+                    ? 'El cliente todavía no tiene acceso al portal.'
+                    : ($usuario->password_encrypted
+                        ? 'Puedes reenviar las credenciales actuales sin cambiar la contraseña.'
+                        : 'Si conoces la clave actual, ingrésala para verificarla y reenviarla sin cambiarla.'),
             ],
         ]);
     }
@@ -436,6 +445,7 @@ class ClienteController extends Controller
             ],
             'nombres' => ['nullable', 'string', 'max:255'],
             'apellidos' => ['nullable', 'string', 'max:255'],
+            'recipient' => ['nullable', 'email', 'max:255'],
         ], [
             'usuario.required' => 'El usuario es obligatorio.',
             'usuario.unique' => 'Ya existe otro usuario con ese login.',
@@ -468,6 +478,7 @@ class ClienteController extends Controller
 
         if ($request->filled('password')) {
             $attributes['password'] = Hash::make($request->input('password'));
+            $attributes['password_encrypted'] = Crypt::encryptString($request->input('password'));
             $attributes['password_changed_at'] = null;
         }
 
@@ -485,7 +496,7 @@ class ClienteController extends Controller
         if ($request->filled('password')) {
             try {
                 $this->emailService->notifyPortalCredentials(
-                    $this->portalEmail($cliente->load('contactos_clientes')),
+                    $request->input('recipient') ?: $this->portalEmail($cliente->load('contactos_clientes')),
                     $usuario->nombres,
                     $usuario->usuario,
                     $request->input('password'),
@@ -518,8 +529,69 @@ class ClienteController extends Controller
         ]);
     }
 
+    public function sendPortalUserCredentials(Request $request, $id)
+    {
+        $validated = $request->validate([
+            'recipient' => ['required', 'email', 'max:255'],
+            'password' => ['nullable', 'string', 'max:255'],
+        ]);
+        $cliente = Cliente::findOrFail($id);
+        $usuario = Usuario::withTrashed()->where('cliente_id', $cliente->id)->latest()->first();
+
+        if (!$usuario) {
+            return response()->json(['status' => 404, 'message' => 'El cliente no tiene un acceso al portal.'], 404);
+        }
+
+        try {
+            if ($usuario->password_encrypted) {
+                $password = Crypt::decryptString($usuario->password_encrypted);
+            } else {
+                $password = $validated['password'] ?? '';
+                if ($password === '' || !Hash::check($password, $usuario->password)) {
+                    return response()->json([
+                        'status' => 422,
+                        'message' => 'Para reenviar esta clave antigua, ingresa su valor actual en el campo de verificación. No se cambiará la contraseña.',
+                    ], 422);
+                }
+
+                // Preserve a verified copy for future resends without changing
+                // the password hash or the user's access.
+                $usuario->update(['password_encrypted' => Crypt::encryptString($password)]);
+            }
+
+            $this->emailService->notifyPortalCredentials(
+                $validated['recipient'],
+                $usuario->nombres,
+                $usuario->usuario,
+                $password,
+                false,
+                true
+            );
+        } catch (\Throwable $e) {
+            Log::error('No se pudieron reenviar las credenciales actuales del portal', [
+                'cliente_id' => $cliente->id,
+                'recipient' => $validated['recipient'],
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'status' => 502,
+                'message' => 'No se pudieron enviar las credenciales. Verifica la configuración del correo e inténtalo nuevamente.',
+            ], 502);
+        }
+
+        return response()->json([
+            'status' => 200,
+            'message' => "Las credenciales actuales se enviaron a {$validated['recipient']}. La clave no fue modificada.",
+            'data' => ['recipient' => $validated['recipient']],
+        ]);
+    }
+
     public function resetPortalUserPassword(Request $request, $id)
     {
+        $validated = $request->validate([
+            'recipient' => ['nullable', 'email', 'max:255'],
+        ]);
         $cliente = Cliente::with('contactos_clientes')->findOrFail($id);
         $usuario = Usuario::withTrashed()->where('cliente_id', $cliente->id)->latest()->first();
 
@@ -529,7 +601,7 @@ class ClienteController extends Controller
         }
 
         $password = $this->generatePortalPassword();
-        $recipient = $this->portalEmail($cliente);
+        $recipient = $validated['recipient'] ?: $this->portalEmail($cliente);
 
         try {
             $this->emailService->notifyPortalCredentials($recipient, $usuario->nombres, $usuario->usuario, $password, true);
@@ -546,7 +618,11 @@ class ClienteController extends Controller
             ], 502);
         }
 
-        $usuario->update(['password' => Hash::make($password), 'password_changed_at' => null]);
+        $usuario->update([
+            'password' => Hash::make($password),
+            'password_encrypted' => Crypt::encryptString($password),
+            'password_changed_at' => null,
+        ]);
 
         return response()->json(['status' => 200, 'message' => "Clave reiniciada y enviada a {$recipient}.", 'data' => [
             'password_visible' => $password,
@@ -1089,6 +1165,7 @@ class ClienteController extends Controller
             'apellidos' => '',
             'usuario' => $cliente->ruc,
             'password' => Hash::make($password),
+            'password_encrypted' => Crypt::encryptString($password),
             'tipo_usuario_id' => $tipoCliente->id,
         ]);
 

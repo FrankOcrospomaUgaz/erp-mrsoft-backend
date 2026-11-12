@@ -6,6 +6,7 @@ use App\Models\Usuario;
 use App\Http\Resources\UsuarioResource;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Crypt;
 
 class UsuarioController extends Controller
 {
@@ -61,7 +62,12 @@ public function index(Request $request)
             'tipo_usuario_id' => 'required|integer'
         ]);
 
-        $request['password'] = Hash::make($request->password);
+        $password = $request->password;
+        $request['password'] = Hash::make($password);
+        unset($request['password_encrypted']);
+        if ($request->filled('cliente_id')) {
+            $request['password_encrypted'] = Crypt::encryptString($password);
+        }
         return Usuario::create($request->all());
     }
 
@@ -81,8 +87,13 @@ public function index(Request $request)
             'tipo_usuario_id' => 'sometimes|required|integer',
         ]);
 
+        unset($request['password_encrypted']);
         if ($request->filled('password')) {
-            $request['password'] = Hash::make($request->password);
+            $password = $request->password;
+            $request['password'] = Hash::make($password);
+            if ($usuario->cliente_id) {
+                $request['password_encrypted'] = Crypt::encryptString($password);
+            }
         } else {
             unset($request['password']);
         }

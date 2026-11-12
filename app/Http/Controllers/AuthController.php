@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Crypt;
 use App\Models\Usuario;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
@@ -103,7 +104,14 @@ class AuthController extends Controller
         if (!Hash::check($request->password_actual, $usuario->password)) {
             return response()->json(['message' => 'La clave actual no es correcta.'], 422);
         }
-        $usuario->update(['password' => Hash::make($request->password), 'password_changed_at' => now()]);
+        $attributes = [
+            'password' => Hash::make($request->password),
+            'password_changed_at' => now(),
+        ];
+        if ($usuario->cliente_id) {
+            $attributes['password_encrypted'] = Crypt::encryptString($request->password);
+        }
+        $usuario->update($attributes);
         return response()->json(['status' => 200, 'message' => 'Clave actualizada correctamente.']);
     }
 

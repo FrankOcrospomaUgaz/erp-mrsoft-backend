@@ -83,6 +83,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('clientes/consulta-dni/{dni}', [App\Http\Controllers\ClienteController::class, 'consultarDni']);
         Route::get('clientes/{id}/portal-user', [App\Http\Controllers\ClienteController::class, 'portalUser']);
         Route::match(['post', 'put'], 'clientes/{id}/portal-user', [App\Http\Controllers\ClienteController::class, 'savePortalUser']);
+        Route::post('clientes/{id}/portal-user/send-credentials', [App\Http\Controllers\ClienteController::class, 'sendPortalUserCredentials']);
         Route::post('clientes/{id}/portal-user/reset-password', [App\Http\Controllers\ClienteController::class, 'resetPortalUserPassword']);
         Route::apiResource('clientes', App\Http\Controllers\ClienteController::class);
         Route::get('clientes/{id}/sucursales', [App\Http\Controllers\ClienteController::class, 'sucursalesPorCliente']);

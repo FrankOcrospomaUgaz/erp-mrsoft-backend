@@ -90,15 +90,19 @@ class ExternalEmailService
         return $this->send([$recipient], $title, $body);
     }
 
-    public function notifyPortalCredentials(string $recipient, string $name, string $username, string $password, bool $reset = false): array
+    public function notifyPortalCredentials(string $recipient, string $name, string $username, string $password, bool $reset = false, bool $existing = false): array
     {
-        $title = $reset ? 'Nueva clave de acceso' : 'Credenciales de acceso al portal';
+        $title = $existing
+            ? 'Credenciales actuales del portal'
+            : ($reset ? 'Nueva clave de acceso' : 'Credenciales de acceso al portal');
         $loginUrl = config('services.email_api.frontend_url') . '/login';
         $changeUrl = config('services.email_api.frontend_url') . '/inicio?cambiar-clave=1';
         $content = '<p>Hola <strong>' . e($name) . '</strong>,</p>'
-            . '<p>' . ($reset ? 'Se generó una nueva clave para tu acceso.' : 'Se creó tu acceso al portal de Mr. Soft.') . '</p>'
+            . '<p>' . ($existing
+                ? 'Se solicitaron nuevamente tus credenciales actuales. Tu clave no fue modificada.'
+                : ($reset ? 'Se generó una nueva clave para tu acceso.' : 'Se creó tu acceso al portal de Mr. Soft.')) . '</p>'
             . '<div style="margin:20px 0;padding:16px;background:#f8fafc;border-left:4px solid #0f766e;line-height:1.8">'
-            . '<strong>Usuario:</strong> ' . e($username) . '<br><strong>Clave temporal:</strong> ' . e($password) . '</div>'
+            . '<strong>Usuario:</strong> ' . e($username) . '<br><strong>' . ($existing ? 'Clave actual:' : 'Clave temporal:') . '</strong> ' . e($password) . '</div>'
             . '<p>Por seguridad, cambia esta clave después de ingresar:</p>'
             . '<a href="' . e($changeUrl) . '" style="display:inline-block;background:#0f766e;color:#fff;text-decoration:none;padding:13px 20px;border-radius:8px;font-weight:700">Cambiar mi clave</a>'
             . '<p style="margin:14px 0 0;color:#64748b;font-size:12px">También puedes ingresar desde: ' . e($loginUrl) . '</p>';
