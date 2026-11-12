@@ -552,9 +552,9 @@ class ClienteController extends Controller
         if (str_contains($dbMessage, 'ruc')) {
             // Extract the RUC from the DB error message if possible
             if (preg_match('/Key \(ruc\)=\((\d+)\)/', $dbMessage, $m)) {
-                return "Ya existe un cliente registrado con el RUC {$m[1]}. Verifique que no se esté duplicando una empresa o local.​";
+                return "El RUC {$m[1]} ya está asignado a otra empresa o corporación.";
             }
-            return 'Ya existe un cliente con ese RUC. No se puede registrar el mismo RUC dos veces.';
+            return 'Ese RUC ya está asignado a otra empresa o corporación.';
         }
         return 'Ya existe un registro duplicado. Verifique los datos e intente nuevamente.';
     }
@@ -562,17 +562,19 @@ class ClienteController extends Controller
     private function makeClienteValidator(array $data, ?int $clienteId = null)
     {
         $tipo = $this->normalizeTipo($data['tipo'] ?? null);
-        $isCorporacion = $tipo === 'corporacion';
         $isEmpresa = $tipo === 'empresa';
-        $uniqueRuc = Rule::unique('clientes', 'ruc')->whereNull('deleted_at');
-
-        if ($clienteId) {
-            $uniqueRuc = $uniqueRuc->ignore($clienteId);
+        $rucRules = ['nullable', 'string', 'max:20'];
+        if (!in_array($tipo, ['local', 'unico'], true)) {
+            $uniqueRuc = Rule::unique('clientes', 'ruc')->whereNull('deleted_at');
+            if ($clienteId) {
+                $uniqueRuc = $uniqueRuc->ignore($clienteId);
+            }
+            $rucRules[] = $uniqueRuc;
         }
 
         $validator = Validator::make($data, [
             'tipo' => 'required|in:corporacion,empresa,local,unico',
-            'ruc' => ['nullable', 'string', 'max:20', $uniqueRuc],
+            'ruc' => $rucRules,
             'razon_social' => ['nullable', 'string', 'max:255'],
             'nombre_comercial' => ['required', 'string', 'max:255'],
             'direccion' => [
@@ -705,7 +707,6 @@ class ClienteController extends Controller
     private function createChildCliente(Cliente $parent, array $data): Cliente
     {
         $data = $this->applyInheritedContactFromParentData($parent, $data);
-        $data = $this->deduplicateChildRuc($parent, $data);
         $data['parent_cliente_id'] = $parent->id;
         $child = Cliente::create($this->extractClienteAttributes($data));
 
@@ -735,13 +736,6 @@ class ClienteController extends Controller
 
         foreach ($children as $childData) {
             $childData = $this->applyInheritedContactFromParentData($parent, $childData);
-            $childData = $this->deduplicateChildRuc($parent, $childData);
-            $incomingRuc = $this->emptyToNull($childData['ruc'] ?? null);
-            if ($incomingRuc !== null) {
-                // A legacy descendant may still own this RUC. Clear it before
-                // matching or creating the corrected parent record.
-                $this->clearDescendantRuc($parent, $incomingRuc);
-            }
             $matchedChild = $this->findMatchingChild($existingChildren, $childData, $usedChildIds);
 
             if ($matchedChild) {
@@ -764,34 +758,6 @@ class ClienteController extends Controller
                 $this->deleteChildrenRecursively($child);
                 $child->delete();
             });
-    }
-
-    private function clearDescendantRuc(Cliente $parent, string $ruc): void
-    {
-        foreach ($parent->hijos_clientes()->get() as $child) {
-            if ($this->emptyToNull($child->ruc) === $ruc) {
-                $child->update(['ruc' => null]);
-            }
-
-            $this->clearDescendantRuc($child, $ruc);
-        }
-    }
-
-    /**
-     * If a child's RUC is identical to its parent's RUC, set it to null.
-     * Locales (branches) operate under the empresa's RUC — storing it again
-     * would violate the unique constraint without adding value.
-     */
-    private function deduplicateChildRuc(Cliente $parent, array $data): array
-    {
-        $childRuc  = $this->emptyToNull($data['ruc'] ?? null);
-        $parentRuc = $this->emptyToNull($parent->ruc);
-
-        if ($childRuc !== null && $parentRuc !== null && $childRuc === $parentRuc) {
-            $data['ruc'] = null;
-        }
-
-        return $data;
     }
 
     private function findMatchingChild($existingChildren, array $childData, array $usedChildIds): ?Cliente
@@ -1069,6 +1035,12 @@ class ClienteController extends Controller
             return;
         }
 
+        // Locals may store their company's RUC for invoicing, but that RUC
+        // identifies one shared portal account owned by the company.
+        if ($this->rucPerteneceAUnAncestro($cliente)) {
+            return;
+        }
+
         $tipoCliente = TiposUsuario::firstOrCreate(['nombre' => 'Cliente']);
         $nombre = $cliente->razon_social ?: $cliente->nombre_comercial ?: $cliente->dueno_nombre ?: 'Cliente';
 
@@ -1117,6 +1089,21 @@ class ClienteController extends Controller
         } catch (\Throwable $e) {
             Log::warning('No se pudo enviar las credenciales del portal', ['cliente_id' => $cliente->id, 'error' => $e->getMessage()]);
         }
+    }
+
+    private function rucPerteneceAUnAncestro(Cliente $cliente): bool
+    {
+        $ancestor = $cliente->parent_cliente;
+
+        while ($ancestor) {
+            if ($this->emptyToNull($ancestor->ruc) === $this->emptyToNull($cliente->ruc)) {
+                return true;
+            }
+
+            $ancestor = $ancestor->parent_cliente;
+        }
+
+        return false;
     }
 
     private function generatePortalPassword(): string
