@@ -65,7 +65,7 @@ class ContratoController extends Controller
     {
         $clienteIds = $this->accessibleClienteIds($request);
         $query = Contrato::with([
-            'cliente',
+            'cliente.parent_cliente.parent_cliente',
             'cuotas',
             'documentos',
             'contratoProductoModulos.modulo',
