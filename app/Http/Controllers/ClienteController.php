@@ -736,16 +736,16 @@ class ClienteController extends Controller
         foreach ($children as $childData) {
             $childData = $this->applyInheritedContactFromParentData($parent, $childData);
             $childData = $this->deduplicateChildRuc($parent, $childData);
+            $incomingRuc = $this->emptyToNull($childData['ruc'] ?? null);
+            if ($incomingRuc !== null) {
+                // A legacy descendant may still own this RUC. Clear it before
+                // matching or creating the corrected parent record.
+                $this->clearDescendantRuc($parent, $incomingRuc);
+            }
             $matchedChild = $this->findMatchingChild($existingChildren, $childData, $usedChildIds);
 
             if ($matchedChild) {
                 $usedChildIds[] = $matchedChild->id;
-                $incomingRuc = $this->emptyToNull($childData['ruc'] ?? null);
-                if ($incomingRuc !== null) {
-                    // Free an old copy from descendants before assigning the RUC
-                    // to this parent. This supports correcting legacy trees.
-                    $this->clearDescendantRuc($matchedChild, $incomingRuc);
-                }
                 $matchedChild->update($this->extractClienteAttributes([
                     ...$childData,
                     'parent_cliente_id' => $parent->id,
@@ -1072,12 +1072,18 @@ class ClienteController extends Controller
         $tipoCliente = TiposUsuario::firstOrCreate(['nombre' => 'Cliente']);
         $nombre = $cliente->razon_social ?: $cliente->nombre_comercial ?: $cliente->dueno_nombre ?: 'Cliente';
 
+        // Prefer the account already keyed by this RUC. If the client also has
+        // a different account, an unordered OR query could select that row and
+        // hit the unique username constraint while changing it to the RUC.
         $usuario = Usuario::withTrashed()
-            ->where(function ($query) use ($cliente) {
-                $query->where('cliente_id', $cliente->id)
-                    ->orWhere('usuario', $cliente->ruc);
-            })
+            ->where('usuario', $cliente->ruc)
             ->first();
+
+        if (!$usuario) {
+            $usuario = Usuario::withTrashed()
+                ->where('cliente_id', $cliente->id)
+                ->first();
+        }
 
         if ($usuario) {
             if (method_exists($usuario, 'trashed') && $usuario->trashed()) {
