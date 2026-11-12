@@ -255,6 +255,9 @@ class ClienteController extends Controller
             ], 201);
         } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
             DB::rollBack();
+            Log::error('Unique constraint failed while creating client hierarchy', [
+                'constraint_error' => $e->getMessage(),
+            ]);
             $msg = $this->friendlyUniqueError($e->getMessage());
             return response()->json(['status' => 422, 'message' => $msg], 422);
         } catch (\Throwable $e) {
@@ -309,6 +312,10 @@ class ClienteController extends Controller
             ], 200);
         } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
             DB::rollBack();
+            Log::error('Unique constraint failed while updating client hierarchy', [
+                'cliente_id' => $cliente->id,
+                'constraint_error' => $e->getMessage(),
+            ]);
             $msg = $this->friendlyUniqueError($e->getMessage());
             return response()->json(['status' => 422, 'message' => $msg], 422);
         } catch (\Throwable $e) {
@@ -776,13 +783,8 @@ class ClienteController extends Controller
             return null;
         }
 
-        if ($childRuc) {
-            $matchedByRuc = $availableChildren->first(fn(Cliente $child) => $child->ruc === $childRuc);
-            if ($matchedByRuc) {
-                return $matchedByRuc;
-            }
-        }
-
+        // Local branches can share their company's RUC, so use their name and
+        // address first to keep each branch matched to its existing record.
         if ($childNombreComercial && $childDireccion) {
             $matchedByNameAndAddress = $availableChildren->first(function (Cliente $child) use ($childNombreComercial, $childDireccion) {
                 return $this->emptyToNull($child->nombre_comercial) === $childNombreComercial
@@ -797,6 +799,13 @@ class ClienteController extends Controller
             $matchedByName = $availableChildren->first(fn(Cliente $child) => $this->emptyToNull($child->nombre_comercial) === $childNombreComercial);
             if ($matchedByName) {
                 return $matchedByName;
+            }
+        }
+
+        if ($childRuc) {
+            $matchedByRuc = $availableChildren->first(fn(Cliente $child) => $child->ruc === $childRuc);
+            if ($matchedByRuc) {
+                return $matchedByRuc;
             }
         }
 
@@ -843,7 +852,7 @@ class ClienteController extends Controller
         $parentContact = $parent->contactos_clientes()->oldest('id')->first();
 
         $contact = [
-            'dni' => $parentContact?->dni ?? $parent->dueno_nombre,
+            'dni' => $parentContact?->dni,
             'nombre' => $parentContact?->nombre ?? $parent->dueno_nombre,
             'celular' => $parentContact?->celular ?? $parent->dueno_celular,
             'email' => $parentContact?->email ?? $parent->dueno_email,
