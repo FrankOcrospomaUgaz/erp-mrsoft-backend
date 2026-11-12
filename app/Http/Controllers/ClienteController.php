@@ -740,6 +740,12 @@ class ClienteController extends Controller
 
             if ($matchedChild) {
                 $usedChildIds[] = $matchedChild->id;
+                $incomingRuc = $this->emptyToNull($childData['ruc'] ?? null);
+                if ($incomingRuc !== null) {
+                    // Free an old copy from descendants before assigning the RUC
+                    // to this parent. This supports correcting legacy trees.
+                    $this->clearDescendantRuc($matchedChild, $incomingRuc);
+                }
                 $matchedChild->update($this->extractClienteAttributes([
                     ...$childData,
                     'parent_cliente_id' => $parent->id,
@@ -758,6 +764,17 @@ class ClienteController extends Controller
                 $this->deleteChildrenRecursively($child);
                 $child->delete();
             });
+    }
+
+    private function clearDescendantRuc(Cliente $parent, string $ruc): void
+    {
+        foreach ($parent->hijos_clientes()->get() as $child) {
+            if ($this->emptyToNull($child->ruc) === $ruc) {
+                $child->update(['ruc' => null]);
+            }
+
+            $this->clearDescendantRuc($child, $ruc);
+        }
     }
 
     /**
