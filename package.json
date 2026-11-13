@@ -2,8 +2,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node init && vite",
-    "build": "node init && vite build"
+    "dev": "node scripts/check-build-inputs.mjs && vite",
+    "build": "node scripts/check-build-inputs.mjs && vite build"
   },
   "devDependencies": {
     "axios": "^1.6.4",
