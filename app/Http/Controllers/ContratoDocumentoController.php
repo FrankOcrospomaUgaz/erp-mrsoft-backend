@@ -9,6 +9,31 @@ use Illuminate\Support\Facades\Storage;
 
 class ContratoDocumentoController extends Controller
 {
+    public function certificateData(Request $request, $contrato)
+    {
+        $contract = Contrato::findOrFail($contrato);
+        $this->ensureAccess($request, $contract);
+
+        return response()->json([
+            'status' => 200,
+            'data' => ['fecha_vencimiento' => $contract->certificado_fecha_vencimiento?->format('Y-m-d')],
+        ]);
+    }
+
+    public function saveCertificateData(Request $request, $contrato)
+    {
+        $contract = Contrato::findOrFail($contrato);
+        $request->validate(['fecha_vencimiento' => ['required', 'date']]);
+        $contract->certificado_fecha_vencimiento = $request->input('fecha_vencimiento');
+        $contract->save();
+
+        return response()->json([
+            'status' => 200,
+            'message' => 'Fecha de vencimiento guardada correctamente.',
+            'data' => ['fecha_vencimiento' => $contract->certificado_fecha_vencimiento?->format('Y-m-d')],
+        ]);
+    }
+
     public function index(Request $request, $contrato)
     {
         $contract = Contrato::findOrFail($contrato);
@@ -59,6 +84,11 @@ class ContratoDocumentoController extends Controller
                 'mime_type' => $file->getClientMimeType() ?: $file->getMimeType(),
                 'tamanio' => $file->getSize(),
             ]);
+        }
+
+        if ($request->input('categoria') === 'certificado_digital' && $request->filled('fecha_vencimiento')) {
+            $contract->certificado_fecha_vencimiento = $request->input('fecha_vencimiento');
+            $contract->save();
         }
 
         return response()->json([

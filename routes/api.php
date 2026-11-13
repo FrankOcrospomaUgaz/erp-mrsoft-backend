@@ -98,6 +98,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('contratos/{id}/firmas', [App\Http\Controllers\ContratoController::class, 'guardarFirmas']);
         Route::apiResource('contratos', App\Http\Controllers\ContratoController::class)->only(['store', 'update', 'destroy']);
         Route::post('contratos/{contrato}/documentos', [App\Http\Controllers\ContratoDocumentoController::class, 'store']);
+        Route::get('contratos/{contrato}/certificado-digital', [App\Http\Controllers\ContratoDocumentoController::class, 'certificateData']);
+        Route::put('contratos/{contrato}/certificado-digital', [App\Http\Controllers\ContratoDocumentoController::class, 'saveCertificateData']);
         Route::delete('documentos-contrato/{documento}', [App\Http\Controllers\ContratoDocumentoController::class, 'destroy']);
         Route::post('cuotas/{cuota}/reenviar-factura', [App\Http\Controllers\CuotaController::class, 'reenviarFactura']);
         Route::get('cuotas/siguiente-correlativo', [App\Http\Controllers\CuotaController::class, 'siguienteCorrelativo']);

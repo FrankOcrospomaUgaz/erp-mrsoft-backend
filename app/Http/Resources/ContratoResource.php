@@ -13,6 +13,7 @@ class ContratoResource extends JsonResource
             'id'           => $this->id,
             'fecha_inicio' => $this->fecha_inicio,
             'fecha_fin'    => $this->fecha_fin,
+            'certificado_fecha_vencimiento' => $this->certificado_fecha_vencimiento?->format('Y-m-d'),
             'numero'       => $this->numero,
             'tipo_contrato'=> $this->tipo_contrato,
             'vigencia_contrato' => $this->vigencia_contrato,
