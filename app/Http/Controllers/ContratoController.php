@@ -1008,7 +1008,10 @@ class ContratoController extends Controller
 
         // Si el contrato ya está anulado o se solicita eliminación directa, eliminarlo (soft-delete)
         if ($contrato->estado === 'anulado' || $request->boolean('force')) {
-            $contrato->delete();
+            DB::transaction(function () use ($contrato) {
+                $contrato->cuotas()->delete();
+                $contrato->delete();
+            });
 
             return response()->json([
                 'status' => 200,
@@ -1030,11 +1033,17 @@ class ContratoController extends Controller
             ], 422);
         }
 
-        $contrato->update([
-            'estado' => 'anulado',
-            'motivo_anulacion' => $request->input('motivo_anulacion'),
-            'fecha_anulacion' => $request->input('fecha_anulacion'),
-        ]);
+        DB::transaction(function () use ($contrato, $request) {
+            $contrato->update([
+                'estado' => 'anulado',
+                'motivo_anulacion' => $request->input('motivo_anulacion'),
+                'fecha_anulacion' => $request->input('fecha_anulacion'),
+            ]);
+
+            // Las cuotas usan SoftDeletes; se conservan en la base de datos,
+            // pero desaparecen de cuentas por cobrar y del portal del cliente.
+            $contrato->cuotas()->delete();
+        });
 
         return response()->json([
             'status' => 200,
