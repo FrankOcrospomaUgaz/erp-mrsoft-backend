@@ -228,6 +228,12 @@ class ContratoController extends Controller
             ->first();
         if ($documentoManual) {
             abort_unless(\Illuminate\Support\Facades\Storage::disk('public')->exists($documentoManual->ruta), 404, 'El contrato cargado ya no está disponible.');
+            if (strtolower(pathinfo($documentoManual->nombre_original, PATHINFO_EXTENSION)) !== 'pdf') {
+                return response()->json([
+                    'status' => 422,
+                    'message' => 'El contrato manual no es PDF. Descárgalo desde el portal del cliente.',
+                ], 422);
+            }
             return response()->file(\Illuminate\Support\Facades\Storage::disk('public')->path($documentoManual->ruta), [
                 'Content-Type' => 'application/pdf',
                 'Content-Disposition' => 'inline; filename="contrato-' . preg_replace('/[^A-Za-z0-9_-]/', '-', $contrato->numero) . '.pdf"',
