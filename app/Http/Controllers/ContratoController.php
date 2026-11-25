@@ -10,6 +10,7 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use PhpOffice\PhpWord\PhpWord;
@@ -322,6 +323,19 @@ class ContratoController extends Controller
 
         if (!$this->canAccessContrato($request, $contrato)) {
             return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
+        }
+
+        $documentoManual = $contrato->documentos()
+            ->where('categoria', 'contrato')
+            ->latest()
+            ->first();
+        if ($documentoManual) {
+            abort_unless(Storage::disk('public')->exists($documentoManual->ruta), 404, 'El contrato cargado ya no está disponible.');
+            return Storage::disk('public')->download(
+                $documentoManual->ruta,
+                $documentoManual->nombre_original,
+                ['Content-Type' => $documentoManual->mime_type ?: 'application/octet-stream']
+            );
         }
 
         $cliente = $contrato->cliente;
