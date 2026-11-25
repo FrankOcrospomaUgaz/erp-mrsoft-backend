@@ -54,7 +54,7 @@ class ContratoDocumentoController extends Controller
         }
 
         $request->validate([
-            'categoria' => ['required', 'in:alta_servicio,facturacion_electronica,certificado_digital'],
+            'categoria' => ['required', 'in:alta_servicio,facturacion_electronica,certificado_digital,contrato'],
             'pin' => ['required_if:categoria,certificado_digital', 'nullable', 'string', 'max:255'],
             'fecha_vencimiento' => ['required_if:categoria,certificado_digital', 'nullable', 'date'],
             'documentos' => ['required', 'array', 'min:1', 'max:20'],
@@ -71,6 +71,17 @@ class ContratoDocumentoController extends Controller
             'documentos.*.mimes' => 'El formato de uno de los archivos no está permitido.',
             'documentos.*.uploaded' => 'Uno de los archivos no pudo cargarse. Puede superar el límite de carga del servidor.',
         ]);
+
+        if ($request->input('categoria') === 'contrato') {
+            foreach ($files as $file) {
+                if (strtolower($file->getClientOriginalExtension()) !== 'pdf') {
+                    return response()->json([
+                        'message' => 'El contrato manual debe estar en formato PDF.',
+                        'errors' => ['documentos' => ['El contrato manual debe estar en formato PDF.']],
+                    ], 422);
+                }
+            }
+        }
 
         $documents = [];
         foreach ($files as $file) {

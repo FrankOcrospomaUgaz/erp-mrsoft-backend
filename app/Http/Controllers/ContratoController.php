@@ -212,6 +212,28 @@ class ContratoController extends Controller
 
     public function pdf(Request $request, $id)
     {
+        $contrato = Contrato::find($id);
+        if (!$contrato) {
+            return response()->json(['status' => 404, 'message' => 'Contrato no encontrado'], 404);
+        }
+
+        if (!$this->canAccessContrato($request, $contrato)) {
+            return response()->json(['status' => 403, 'message' => 'No autorizado'], 403);
+        }
+
+        // Si administración cargó un contrato manual, ese archivo es el documento oficial del portal.
+        $documentoManual = $contrato->documentos()
+            ->where('categoria', 'contrato')
+            ->latest()
+            ->first();
+        if ($documentoManual) {
+            abort_unless(\Illuminate\Support\Facades\Storage::disk('public')->exists($documentoManual->ruta), 404, 'El contrato cargado ya no está disponible.');
+            return response()->file(\Illuminate\Support\Facades\Storage::disk('public')->path($documentoManual->ruta), [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'inline; filename="contrato-' . preg_replace('/[^A-Za-z0-9_-]/', '-', $contrato->numero) . '.pdf"',
+            ]);
+        }
+
         $contrato = Contrato::with([
             'cliente.parent_cliente.parent_cliente',
             'cuotas',
