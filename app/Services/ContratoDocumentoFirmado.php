@@ -70,14 +70,13 @@ class ContratoDocumentoFirmado
 
             if ($pageNumber === $pageCount) {
                 $signatureWidth = min(54, $size['width'] * 0.30);
-                $x = $size['width'] - $signatureWidth - 16;
-                $lineY = $size['height'] - 25;
+                $signatureHeight = 20;
+                // The uploaded contract already contains the client name and signature area.
+                // Place only the signature above the client's name; do not add another line or label.
+                $x = ($size['width'] * 0.75) - ($signatureWidth / 2);
+                $y = $size['height'] - 96;
 
-                $pdf->Image($signaturePath, $x + 5, $lineY - 24, $signatureWidth - 10, 20);
-                $pdf->Line($x, $lineY, $x + $signatureWidth, $lineY);
-                $pdf->SetFont('Arial', 'B', 10);
-                $pdf->SetXY($x, $lineY + 2);
-                $pdf->Cell($signatureWidth, 6, 'EL CLIENTE', 0, 0, 'C');
+                $pdf->Image($signaturePath, $x, $y, $signatureWidth, $signatureHeight);
             }
         }
 
