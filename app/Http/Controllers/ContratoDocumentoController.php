@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Contrato;
 use App\Models\ContratoDocumento;
+use App\Services\ContratoDocumentoFirmado;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
@@ -98,13 +99,24 @@ class ContratoDocumentoController extends Controller
         ], 201);
     }
 
-    public function download(Request $request, $documento)
+    public function download(Request $request, $documento, ContratoDocumentoFirmado $firmador)
     {
         $document = ContratoDocumento::with('contrato')->findOrFail($documento);
         $this->ensureAccess($request, $document->contrato);
         abort_if($request->user()?->cliente_id && $document->categoria === 'certificado_digital', 403, 'El certificado digital es de uso administrativo.');
 
         abort_unless(Storage::disk('public')->exists($document->ruta), 404, 'El documento ya no está disponible.');
+
+        if ($document->categoria === 'contrato') {
+            $signedCopy = $firmador->crearCopia($document);
+            if ($signedCopy) {
+                return response()->download(
+                    $signedCopy['path'],
+                    $signedCopy['filename'],
+                    ['Content-Type' => $signedCopy['mime_type']]
+                )->deleteFileAfterSend(true);
+            }
+        }
 
         return Storage::disk('public')->download(
             $document->ruta,

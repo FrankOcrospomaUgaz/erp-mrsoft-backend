@@ -6,6 +6,7 @@ use App\Http\Resources\ContratoResource;
 use App\Models\Cliente;
 use App\Models\Contrato;
 use App\Models\Facturador;
+use App\Services\ContratoDocumentoFirmado;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -211,7 +212,7 @@ class ContratoController extends Controller
         ], 200);
     }
 
-    public function pdf(Request $request, $id)
+    public function pdf(Request $request, $id, ContratoDocumentoFirmado $firmador)
     {
         $contrato = Contrato::find($id);
         if (!$contrato) {
@@ -235,10 +236,14 @@ class ContratoController extends Controller
                     'message' => 'El contrato manual no es PDF. Descárgalo desde el portal del cliente.',
                 ], 422);
             }
-            return response()->file(\Illuminate\Support\Facades\Storage::disk('public')->path($documentoManual->ruta), [
+            $signedCopy = $firmador->crearCopia($documentoManual);
+            $path = $signedCopy['path'] ?? \Illuminate\Support\Facades\Storage::disk('public')->path($documentoManual->ruta);
+            $filename = $signedCopy['filename'] ?? 'contrato-' . preg_replace('/[^A-Za-z0-9_-]/', '-', $contrato->numero) . '.pdf';
+            $response = response()->file($path, [
                 'Content-Type' => 'application/pdf',
-                'Content-Disposition' => 'inline; filename="contrato-' . preg_replace('/[^A-Za-z0-9_-]/', '-', $contrato->numero) . '.pdf"',
+                'Content-Disposition' => 'inline; filename="' . $filename . '"',
             ]);
+            return $signedCopy ? $response->deleteFileAfterSend(true) : $response;
         }
 
         $contrato = Contrato::with([
@@ -305,7 +310,7 @@ class ContratoController extends Controller
         ]);
     }
 
-    public function word(Request $request, $id)
+    public function word(Request $request, $id, ContratoDocumentoFirmado $firmador)
     {
         $contrato = Contrato::with([
             'cliente.parent_cliente.parent_cliente',
@@ -331,6 +336,14 @@ class ContratoController extends Controller
             ->first();
         if ($documentoManual) {
             abort_unless(Storage::disk('public')->exists($documentoManual->ruta), 404, 'El contrato cargado ya no está disponible.');
+            $signedCopy = $firmador->crearCopia($documentoManual);
+            if ($signedCopy) {
+                return response()->download(
+                    $signedCopy['path'],
+                    $signedCopy['filename'],
+                    ['Content-Type' => $signedCopy['mime_type']]
+                )->deleteFileAfterSend(true);
+            }
             return Storage::disk('public')->download(
                 $documentoManual->ruta,
                 $documentoManual->nombre_original,
