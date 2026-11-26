@@ -20,9 +20,12 @@
         ul { margin: 2px 0 0 18px; padding-left: 14px; }
         li { margin-bottom: 2px; }
         .bank-block { margin-top: 8px; white-space: pre-line; }
-        .signature-space { height: 44px; }
-        .signature-table { width: 100%; margin-top: 40px; border-collapse: collapse; }
-        .signature-table td { width: 50%; text-align: center; border: none; padding: 0 18px; vertical-align: bottom; }
+        .signature-block { page-break-inside: avoid; break-inside: avoid; }
+        .signature-space { height: 28px; }
+        .signature-table { width: 100%; margin-top: 12px; border-collapse: collapse; page-break-inside: avoid; break-inside: avoid; }
+        .signature-table td { width: 50%; height: 120px; text-align: center; border: none; padding: 0 18px; vertical-align: bottom; }
+        .signature-mark { height: 88px; text-align: center; }
+        .signature-mark img { display: inline-block; max-height: 82px; max-width: 220px; object-fit: contain; vertical-align: bottom; }
         .signature-line {
             border-top: 1px solid #000;
             padding-top: 8px;
@@ -424,13 +427,14 @@ Cuenta CCI en soles
             </p>
         </div>
 
+        <div class="signature-block">
         <div class="signature-space"></div>
         <table class="signature-table">
             <tr>
                 <td style="vertical-align: bottom; text-align: center;">
                     @if(!empty($firmaArrendador))
-                        <div style="margin-bottom: -15px;">
-                            <img src="{{ $firmaArrendador }}" style="max-height: 85px; max-width: 220px; object-fit: contain;" alt="Firma Arrendador" />
+                        <div class="signature-mark">
+                            <img src="{{ $firmaArrendador }}" alt="Firma Arrendador" />
                         </div>
                     @endif
                     <div class="signature-line">
@@ -439,8 +443,8 @@ Cuenta CCI en soles
                 </td>
                 <td style="vertical-align: bottom; text-align: center;">
                     @if(!empty($firmaCliente))
-                        <div style="margin-bottom: -15px;">
-                            <img src="{{ $firmaCliente }}" style="max-height: 85px; max-width: 220px; object-fit: contain;" alt="Firma Cliente" />
+                        <div class="signature-mark">
+                            <img src="{{ $firmaCliente }}" alt="Firma Cliente" />
                         </div>
                     @endif
                     <div class="signature-line">
@@ -449,6 +453,7 @@ Cuenta CCI en soles
                 </td>
             </tr>
         </table>
+        </div>
     </div>
 </body>
 </html>

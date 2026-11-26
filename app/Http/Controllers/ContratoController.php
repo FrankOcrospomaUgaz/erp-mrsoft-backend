@@ -736,7 +736,7 @@ class ContratoController extends Controller
         // Firmas
         $section->addTextBreak(2);
         $sigTable = $section->addTable(['alignment' => JcTable::CENTER, 'borderSize' => 0]);
-        $sigTable->addRow(1600);
+        $sigTable->addRow(2600, ['cantSplit' => true]);
 
         $tempFilesToDelete = [];
 
@@ -860,7 +860,7 @@ class ContratoController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'firma_cliente' => 'required|string',
+            'firma_cliente' => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
@@ -868,12 +868,14 @@ class ContratoController extends Controller
         }
 
         $contrato->update([
-            'firma_cliente' => $request->input('firma_cliente'),
+            'firma_cliente' => $request->input('firma_cliente') ?: null,
         ]);
 
         return response()->json([
             'status' => 200,
-            'message' => 'Contrato firmado por el cliente correctamente.',
+            'message' => $contrato->firma_cliente
+                ? 'Firma del contrato guardada correctamente.'
+                : 'Firma del contrato eliminada correctamente.',
             'data' => new ContratoResource($contrato->fresh()),
         ]);
     }
